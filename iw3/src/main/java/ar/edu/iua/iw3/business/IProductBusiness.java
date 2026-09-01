@@ -2,10 +2,9 @@ package ar.edu.iua.iw3.business;
 
 import java.util.List;
 
-import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
-
 import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.business.execption.FoundException;
+import ar.edu.iua.iw3.business.execption.NotFoundException;
 import ar.edu.iua.iw3.model.Product;
 
 public interface IProductBusiness {

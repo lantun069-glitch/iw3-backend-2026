@@ -23,8 +23,13 @@ public class Iw3Application implements CommandLineRunner{
 	
 	@Override
 	public void run(String... args) throws Exception {
+		/*
 		log.debug("==============================================================================================");
 		log.debug(productService.list().toString());
+		log.debug(productService.load(1).toString());
+		log.debug(productService.load("Arroz").toString());
+		log.debug(productService.load("Leche").toString());
+		*/
 	}
 
 }
