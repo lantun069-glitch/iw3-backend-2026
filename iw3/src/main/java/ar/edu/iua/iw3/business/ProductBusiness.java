@@ -32,7 +32,10 @@ public class ProductBusiness implements IProductBusiness {
 	}
 
 	@Override
-	public Product load(long id) throws NotFoundException, BusinessException {
+	public Product load(Long id) throws NotFoundException, BusinessException {
+		if (id==null) {
+			throw NotFoundException.builder().message("No se encuentra el Producto id=null").build();
+		}
 		Optional<Product> r;
 		try {
 			r = productDAO.findById(id);
