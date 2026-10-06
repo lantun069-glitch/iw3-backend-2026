@@ -33,7 +33,7 @@ public class ProductCli1JsonDeserializer extends StdDeserializer<ProductCli1> {
 
 		JsonNode node = ctxt.readTree(jp);
 
-		String code = JsonUtiles.getString(node, "product_code,code_product,code".split(","),
+		String code = JsonUtiles.getString(node, "product_code,code_product,code,codigo".split(","),
 				System.currentTimeMillis() + "");
 
 		String productDesc = JsonUtiles.getString(node,

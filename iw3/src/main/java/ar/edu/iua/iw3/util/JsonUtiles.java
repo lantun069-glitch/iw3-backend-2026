@@ -55,7 +55,7 @@ public final class JsonUtiles {
 	 *    el primero que encuentra será el valor retornado.
 	 * 2) Si no se encuentra ninguno de los atributos del punto 1), se
 	 *    retorna "defaultValue".
-	 * Ejemplo: supongamos que "node" represente: {"code":"c1, "codigo":"c11", "stock":true}
+	 * Ejemplo: supongamos que "node" represente: {"code":"c1", "codigo":"c11", "stock":true}
 	 *   getString(node, String[]{"codigo","cod"},"-1") retorna: "cl1"
 	 *   getString(node, String[]{"cod_prod","c_prod"},"-1") retorna: "-1"
 	 * @param node
