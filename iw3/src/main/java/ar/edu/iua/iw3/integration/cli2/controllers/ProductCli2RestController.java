@@ -1,6 +1,5 @@
 package ar.edu.iua.iw3.integration.cli2.controllers;
 
-
 import java.util.Calendar;
 import java.util.Date;
 
@@ -18,8 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.controllers.BaseRestController;
 import ar.edu.iua.iw3.controllers.Constants;
+import ar.edu.iua.iw3.integration.cli2.model.ProductCli2;
+import ar.edu.iua.iw3.integration.cli2.model.ProductCli2SlimV1JsonSerializer;
 import ar.edu.iua.iw3.integration.cli2.model.business.IProductCli2Business;
 import ar.edu.iua.iw3.util.IStandartResponseBusiness;
+import ar.edu.iua.iw3.util.JsonUtiles;
+import tools.jackson.databind.ser.std.StdSerializer;
 
 @RestController
 @RequestMapping(Constants.URL_INTEGRATION_CLI2 + "/products")
@@ -33,18 +36,26 @@ public class ProductCli2RestController extends BaseRestController {
 
 	@GetMapping(value = "/list-expired", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<?> listExpired(
-			@RequestParam(name = "since", required = false, defaultValue = "1970-01-01 00:00:00") @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date since) {
+			@RequestParam(name = "since", required = false, defaultValue = "1970-01-01 00:00:00") @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date since,
+			@RequestParam(name = "slim", required = false, defaultValue = "v0") String slimVersion) {
 		try {
 			Calendar c = Calendar.getInstance();
 			c.setTime(since);
 			if (c.get(Calendar.YEAR) == 1970) {
 				since = new Date();
 			}
-			return new ResponseEntity<>(productBusiness.listExpired(since), HttpStatus.OK);
+			StdSerializer<ProductCli2> ser = null;
+			if (slimVersion.equalsIgnoreCase("v1")) {
+				ser = new ProductCli2SlimV1JsonSerializer(ProductCli2.class);
+			}else {
+				return new ResponseEntity<>(productBusiness.listExpired(since), HttpStatus.OK);
+			}
+			String result = JsonUtiles.getObjectMapper(ProductCli2.class, ser, null)
+					.writeValueAsString(productBusiness.listExpired(since));
+			return new ResponseEntity<>(result, HttpStatus.OK);
 		} catch (BusinessException e) {
 			return new ResponseEntity<>(response.build(HttpStatus.INTERNAL_SERVER_ERROR, e, e.getMessage()),
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
-
 }
