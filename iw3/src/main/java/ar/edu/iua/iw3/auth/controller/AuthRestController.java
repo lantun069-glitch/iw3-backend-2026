@@ -23,6 +23,7 @@ import com.auth0.jwt.algorithms.Algorithm;
 
 import ar.edu.iua.iw3.auth.User;
 import ar.edu.iua.iw3.auth.custom.CustomAuthenticationManager;
+import ar.edu.iua.iw3.auth.events.UserEvent;
 import ar.edu.iua.iw3.auth.filters.AuthConstants;
 import ar.edu.iua.iw3.controllers.BaseRestController;
 import ar.edu.iua.iw3.controllers.Constants;
@@ -41,6 +42,7 @@ public class AuthRestController extends BaseRestController {
 	private ApplicationEventPublisher applicationEventPublisher;
 
 
+	
 	@PostMapping(value = Constants.URL_LOGIN, produces = MediaType.TEXT_PLAIN_VALUE)
 	public ResponseEntity<?> loginExternalOnlyToken(@RequestParam String username, @RequestParam String password, HttpServletRequest request) {
 		Authentication auth = null;
@@ -56,14 +58,14 @@ public class AuthRestController extends BaseRestController {
 
 		User user = (User) auth.getPrincipal();
 		String token = JWT.create().withSubject(user.getUsername())
-				
+				.withClaim("internalId", user.getIdUser())
 				.withClaim("roles", new ArrayList<String>(user.getAuthoritiesStr()))
 				.withClaim("email", user.getEmail())
 				.withClaim("version", "1.0.0")
 				.withExpiresAt(new Date(System.currentTimeMillis() + AuthConstants.EXPIRATION_TIME))
 				.sign(Algorithm.HMAC512(AuthConstants.SECRET.getBytes()));
 
-		//applicationEventPublisher.publishEvent(new UserEvent(user, request, UserEvent.TypeEvent.LOGIN));
+		applicationEventPublisher.publishEvent(new UserEvent(user, request, UserEvent.TypeEvent.LOGIN));
 
 		return new ResponseEntity<String>(token, HttpStatus.OK);
 	}
