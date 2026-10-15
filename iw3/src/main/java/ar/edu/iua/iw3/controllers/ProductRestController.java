@@ -22,9 +22,21 @@ import ar.edu.iua.iw3.business.execption.NotFoundException;
 import ar.edu.iua.iw3.model.Category;
 import ar.edu.iua.iw3.model.Product;
 import ar.edu.iua.iw3.util.IStandartResponseBusiness;
+import ar.edu.iua.iw3.util.StandartResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping(Constants.URL_PRODUCTS)
+@Tag(description = "API Servicios relacionados con Productos", name = "Product")
+//@SecurityRequirement(name = "Bearer Authentication") //Se pueden aplicar otros métodos
+
 public class ProductRestController extends BaseRestController {
 
 	@Autowired
@@ -122,7 +134,22 @@ public class ProductRestController extends BaseRestController {
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
+	
+	
+	@Operation(operationId = "load-category", summary = "Este servicio permite cargar una categoría por su id.")
+	@Parameter(in = ParameterIn.PATH, name = "id", schema = @Schema(type = "integer"), required = true, description = "Identificador de la categoría.")
+	@ApiResponses(value = { 
+			@ApiResponse(responseCode = "200", description = "Devuelve una Categoría.", content = {
+				@Content(mediaType = "application/json", schema = @Schema(implementation = Category.class)) }),
+			@ApiResponse(responseCode = "500", description = "Error interno", content = {
+				@Content(mediaType = "application/json", schema = @Schema(implementation = StandartResponse.class)) }), 
+			@ApiResponse(responseCode = "403", description = "No posee autorización para consumir este servicio", content = {
+				@Content(mediaType = "application/json", schema = @Schema(implementation = StandartResponse.class)) }), 
 
+			@ApiResponse(responseCode = "404", description = "No se encuentra la categoría para el identificador informado", content = {
+				@Content(mediaType = "application/json", schema = @Schema(implementation = StandartResponse.class)) }) 
+			
+	})
 	@GetMapping(value = "/categories/{id}")
 	public ResponseEntity<?> loadCategory(@PathVariable("id") long id) {
 		try {

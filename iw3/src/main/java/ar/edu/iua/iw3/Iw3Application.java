@@ -49,8 +49,8 @@ public class Iw3Application extends SpringBootServletInitializer implements Comm
 				"-------------------------------------------------------------------------------------------------------------------");
 		log.info("- Initial TimeZone: {} ({})", TimeZone.getDefault().getDisplayName(), TimeZone.getDefault().getID());
 		log.info("- Perfil activo {}", profile);
-		log.info(
-				"-------------------------------------------------------------------------------------------------------------------");
+		log.info("-------------------------------------------------------------------------------------------------------------------");
+		/*
 		if (profile.equals("cli2")) {
 			log.info(
 					"Default -------------------------------------------------------------------------------------------------------");
@@ -64,6 +64,7 @@ public class Iw3Application extends SpringBootServletInitializer implements Comm
 		log.info("Cantidad de productos de la categoría id=1: {}", productDAO.countProductsByCategory(1));
 		log.info("Set stock=true producto id que no existe, resultado={}", productDAO.setStock(true, 333));
 
+		*/
 		
 		/*
 		 * log.debug(

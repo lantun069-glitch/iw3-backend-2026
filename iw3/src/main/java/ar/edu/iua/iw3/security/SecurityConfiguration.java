@@ -57,8 +57,15 @@ public class SecurityConfiguration {
 		// CSRF: https://developer.mozilla.org/es/docs/Glossary/CSRF
 		http.csrf(AbstractHttpConfigurer::disable);
 		http.authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.POST, Constants.URL_LOGIN).permitAll()
-				.requestMatchers("/v3/api-docs/**").permitAll().requestMatchers("/swagger-ui.html").permitAll()
-				.requestMatchers("/swagger-ui/**").permitAll().requestMatchers("/ui/**").permitAll()
+
+				.requestMatchers("/v3/api-docs/**").permitAll()
+				.requestMatchers("/swagger-ui.html").permitAll()
+				.requestMatchers("/swagger-ui/**").permitAll()
+				
+				.requestMatchers("/ui/**").permitAll()
+				.requestMatchers("/ui/js/**").permitAll()
+				.requestMatchers("/favicon.ico").permitAll()
+				
 				.requestMatchers("/demo/**").permitAll().anyRequest().authenticated());
 		http.httpBasic(Customizer.withDefaults())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
