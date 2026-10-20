@@ -1,1 +1,11 @@
 /.metadata/
+
+# Local assistant files
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Local environment files (real secrets live here, never commit them)
+.env
+.env.*
+!.env.example
