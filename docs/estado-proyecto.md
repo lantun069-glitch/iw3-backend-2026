@@ -1,11 +1,11 @@
 # Estado del proyecto
 
-Último checkpoint: [`docs/checkpoints/2026-10-20-03.md`](checkpoints/2026-10-20-03.md).
-Fase activa: **F1** (base local reproducible), pendiente de iniciar. **F0
-(inventario y setup) está cerrada** — ver sección "Cierre de F0" al final
-de este documento. Próximo paso de F1: verificar qué Docker y qué
-contenedores existen ya en esta máquina, antes de preparar un MySQL
-local.
+Último checkpoint: [`2026-10-20-04.md`](checkpoints/2026-10-20-04.md).
+Fase activa: **F1 — revisión final y respaldo pendientes**. F0 está cerrada.
+MySQL local, arranque con `mysqldev` y autenticación HTTP ya fueron probados
+según los resultados registrados por el equipo. La guía de reproducción está
+preparada en [`desarrollo-local.md`](desarrollo-local.md). Falta aprobar esta
+revisión y publicar los cambios de F1; no se declara todavía el cierre formal.
 
 ## Repositorios
 
@@ -34,17 +34,15 @@ como un estado desplegable.
 - Perfiles de **empaquetado**: `war-build` (packaging `war`, Tomcat
   `provided`) y `jar-build` (packaging `jar`, Tomcat `compile`).
 
-**Cómo se conectan los perfiles Maven con los perfiles Spring:** son dos
-mecanismos distintos. Los 4 perfiles Maven de "ejecución"
-(`mysqldev`/`mysqlprod`/`cli1`/`cli2`) no activan nada por sí mismos; cada
-uno solo fija la propiedad Maven `spring.profiles.active` a un valor fijo
-(ej. `mysqldev`), que el plugin de Spring Boot Maven propaga como
-variable de entorno/propiedad de sistema al arrancar la aplicación. Es
-Spring, no Maven, el que después usa ese valor para decidir qué beans
-`@Profile("...")` cargar y qué `application-<perfil>.properties` fusionar.
-Los perfiles Maven de "empaquetado" (`war-build`/`jar-build`) son un
-mecanismo completamente aparte: solo deciden `packaging.type` y el scope
-de Tomcat, sin relación con `spring.profiles.active`.
+**Perfiles Maven y Spring: corrección comprobada durante F1.** Los perfiles
+Maven `mysqldev`/`mysqlprod`/`cli1`/`cli2` fijan una propiedad de build,
+`spring.profiles.active`. En este proyecto, según el diagnóstico de F1, el POM
+no la reenvía al proceso de `spring-boot:run`. Evaluar esa propiedad con Maven
+no demuestra qué perfil usa Spring en ejecución. El arranque probado necesita
+`export SPRING_PROFILES_ACTIVE=mysqldev`, además de
+`./mvnw -Dbuild=war -Pmysqldev spring-boot:run`.
+Spring selecciona entonces los beans con `@Profile` y las propiedades del perfil.
+El empaquetado (`war-build`/`jar-build`) es una decisión separada.
 
 **Hallazgo verificado de forma empírica (no solo leído del POM), con
 `./mvnw help:active-profiles` y `./mvnw help:evaluate`:**
@@ -67,7 +65,8 @@ de Tomcat, sin relación con `spring.profiles.active`.
   resuelve a `mysqldev` (`help:evaluate
   -Dexpression=spring.profiles.active` → `mysqldev`).
 - **Regla práctica para los comandos de F1:** siempre combinar un perfil
-  de ejecución con `-Dbuild=war` o `-Dbuild=jar` explícito. Nunca activar
+  de ejecución con `-Dbuild=war` o `-Dbuild=jar` explícito y definir también
+  el perfil Spring en runtime. Nunca activar
   `-Pmysqldev`/`-Pmysqlprod`/`-Pcli1`/`-Pcli2` solo, sin `-Dbuild=...`.
 
 - No activar `mysqldev` y `mysqlprod` juntos: cada `*ScanConfig` excluye
@@ -89,14 +88,15 @@ de Tomcat, sin relación con `spring.profiles.active`.
 
 ### Seguridad y autenticación (`auth/`, `security/`)
 - `SecurityConfiguration`: CORS abierto (`allowedOrigins("*")`), CSRF
-  deshabilitado, sesión `STATELESS`, rutas públicas (`/login`,
+  deshabilitado, sesión `STATELESS`, rutas públicas (login efectivo `POST /api/v1/login`,
   Swagger/OpenAPI, `/ui/**`, `/demo/**`), resto autenticado. **Modificado
   por nosotros**: inyecta `jwt.secret` por `@Value` y lo valida al arrancar
   (`validateJwtSecret`, `@PostConstruct`) — ver `docs/decisiones.md`.
 - `JWTAuthorizationFilter`: filtro HTTP Basic/JWT, lee el token de header o
   query param. **Modificado por nosotros**: recibe `jwtSecret` por
   constructor en vez de leer una constante fija.
-- `AuthRestController`: login (`/login`) devuelve JWT firmado; endpoint
+- `AuthRestController`: login (`POST /api/v1/login`, parámetros de formulario
+  `username` y `password`) devuelve JWT firmado. El proyecto también expone
   `/demo/encodepass` para generar un hash BCrypt de prueba. **Modificado
   por nosotros**: firma con `jwtSecret` inyectado en vez de
   `AuthConstants.SECRET`.
@@ -123,11 +123,9 @@ de Tomcat, sin relación con `spring.profiles.active`.
   excepciones de negocio reutilizables tal cual.
 - `util/{JsonUtiles,StandartResponse,IStandartResponseBusiness,StandartResponseBusiness}.java`:
   helpers de respuesta estándar y JSON — reutilizar, no reimplementar.
-- `util/EmailBusiness.java`: envío de correo simple vía
-  `JavaMailSender`. Nota: `setFrom("noreply@magm.com.ar")` está
-  hardcodeado (no es secreto, es un remitente del dominio del profesor);
-  si se reutiliza para las alarmas de F6 hay que decidir si se cambia el
-  remitente (DECISIÓN DEL EQUIPO pendiente).
+- `util/EmailBusiness.java`: envío simple vía `JavaMailSender`. En F1 se
+  reemplazó el remitente fijo por `mail.from`, con default al usuario SMTP.
+  El proveedor y el remitente autorizado para correo real siguen pendientes.
 - `controllers/BaseRestController.java`: solo expone
   `getUserLogged()` (usuario autenticado desde el `SecurityContext`). **No
   construye respuestas estándar** — confirmado por lectura directa de la
@@ -149,12 +147,11 @@ de Tomcat, sin relación con `spring.profiles.active`.
   (no meter el dominio de gas dentro de `cli1`/`cli2`).
 
 ### Scheduling, eventos y websocket
-- `schedules/Scheduler.java`: dos jobs de ejemplo (`@Scheduled` fijo y
-  cron) + un job real `expired()` que busca productos por vencer
-  (`cli2`) y manda un mail con `EmailBusiness`. Usa
-  `@Value("${expired.product.send.to:magm3333@gmail.com}")` — default con
-  el mail del profesor; no es secreto, pero si se reutiliza este patrón
-  para la alarma de temperatura (F6) hay que sacar ese default también.
+- `schedules/Scheduler.java`: conserva dos jobs de ejemplo y `expired()`,
+  que consulta productos de `cli2`. En F1 se eliminó el destinatario docente
+  por defecto y se agregó una salida temprana si
+  `jobs.expired-notification.enabled=false` (default). Esto deshabilita solo
+  ese job de correo, no todos los jobs ni todos los caminos de envío.
 - `events/AsyncSpringEventsConfig.java`: habilita `@EnableAsync` para los
   eventos de usuario.
 - `websocket/`: ejemplo de WebSocket + gráfico de datos en tiempo real
@@ -189,8 +186,15 @@ de Tomcat, sin relación con `spring.profiles.active`.
   configuración en vez de una constante fija (detalle arriba).
 - `JwtSecurityVerificationTest.java`: prueba unitaria nueva (firma/
   verificación JWT + validación de arranque).
-- Todo lo demás listado en "Inventario" es código del profesor, sin
-  modificar.
+- F1: `compose.local.yaml` con MySQL 8.0.43, volumen persistente y puerto
+  `127.0.0.1:3306:3306`; `application-mysqldev.properties` apunta a ese puerto.
+- F1: remitente y destinatario parametrizados, SMTP host/puerto configurables,
+  y job heredado de correo deshabilitado por defecto.
+- La URL base de `application.properties` conserva `33306`: el arranque local
+  documentado requiere `mysqldev`, cuya URL usa `3306`. No se verificó el
+  arranque sin perfil; no describir ambos valores como iguales.
+- El resto del inventario corresponde a la base docente salvo las
+  modificaciones expresamente indicadas.
 
 ## Verificado vs. pendiente (resumen; detalle y evidencia en
 `docs/requisitos.md`)
@@ -206,14 +210,19 @@ de Tomcat, sin relación con `spring.profiles.active`.
   `feature/setup-inicial` (backend) y `main` (frontend, solo
   `.gitignore`); perfiles Maven/empaquetado verificados con
   `help:active-profiles`/`help:evaluate` (ver arriba).
-- **Pendiente, explícitamente no probado:** arranque real de la
-  aplicación Spring Boot, con o sin `JWT_SECRET` definida (requiere una
-  base MySQL real, todavía no levantada) — la afirmación de que Spring
-  falla al no resolver el placeholder si falta la variable es un
-  razonamiento sobre su comportamiento documentado, no una prueba
-  ejecutada; compilación/pruebas sobre `main`/`develop` (solo se verificó
-  `feature/setup-inicial`); cualquier requisito de dominio (TP01-TP36:
-  ninguno implementado todavía, F0 es solo inventario).
+- **Verificado en F1, según registros del equipo:** MySQL 8.0.43 y base
+  `iw3_2026`; arranque Spring con `mysqldev`, JDBC en `localhost:3306` y HTTP
+  en `8080`; seis tablas creadas; OpenAPI 200 y Swagger 302; login correcto
+  200, acceso con JWT 200, contraseña incorrecta 401, token alterado 401 y
+  acceso sin token 401. El último caso se realizó antes, sin repetirse.
+- **Alcance de esta revisión:** lectura del ZIP de F1 y contraste con los
+  resultados comunicados. No se ejecutaron aquí Maven, MySQL ni HTTP; el ZIP
+  no incluye el POM, los controladores de autenticación ni los logs completos.
+- **Pendiente:** arranque real sin `JWT_SECRET`; pruebas de `main`/`develop`;
+  correo real, proveedor institucional y autorización por roles del dominio;
+  implementación del dominio. El rol de prueba no valida los roles de F6.
+  La matriz `docs/requisitos.md` conserva sus estados: TP01–TP35 pendientes,
+  TP36 en curso (preparación de defensa, sin práctica real).
 
 ## Corrección a un checkpoint ya publicado
 
@@ -250,14 +259,10 @@ El bloque documental quedó guardado y respaldado: commit `0ab399f` en
 prueba). **F0 queda formalmente cerrada con esta revisión** — ver
 `docs/checkpoints/2026-10-20-03.md`.
 
-**F1 pendiente de iniciar.** El arranque completo, la prueba HTTP de
-login (autorizado / sin token / token inválido) y la reproducción
-documentada del entorno siguen pendientes, igual que todas las
-limitaciones y dudas de dominio ya registradas en los checkpoints
-(fecha de entrega 2026, inconsistencia de densidad, contrato de
-activación, metadatos de aceptación de alarma, stack/CI/hosting FE):
-cerrar F0 no las resuelve, solo las traslada a F1+ con su estado
-intacto. Primer paso concreto de F1, todavía no ejecutado: verificar qué
-Docker y qué contenedores existen ya en esta máquina antes de preparar
-un MySQL local (no asumir que no hay nada corriendo, no crear un
-contenedor nuevo sin revisar primero).
+**Actualización posterior a F0:** la infraestructura local y los casos de
+login de F1 ya se ejecutaron. La anterior afirmación de que F1 no había
+comenzado queda superada por el checkpoint 04; el checkpoint 03 se conserva
+como registro histórico. Permanecen las dudas de fecha de entrega 2026,
+densidad, contrato de activación, metadatos de aceptación de alarma y
+stack/CI/hosting FE. En esta revisión no se consultaron nuevas fuentes de
+cátedra ni se resolvieron esas dudas.

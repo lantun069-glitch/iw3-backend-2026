@@ -98,9 +98,10 @@ Procedimiento acordado para cada commit nuevo que aparezca ahi:
 - **Perfiles Maven vs. perfiles Spring (verificado con `help:active-profiles`
   y `help:evaluate`, no solo leido del POM):** los 4 perfiles de
   ejecucion (`mysqldev`, `mysqlprod`, `cli1`, `cli2`) solo fijan la
-  propiedad `spring.profiles.active`, que el plugin de Spring Boot usa
-  para seleccionar el perfil de la aplicacion en tiempo de ejecucion; no
-  tienen relacion directa con el empaquetado. El perfil `war-build` tiene
+  propiedad Maven `spring.profiles.active`. **Corrección de F1:** esa
+  propiedad no se propaga automáticamente al runtime en este POM; el
+  arranque probado necesita `SPRING_PROFILES_ACTIVE=mysqldev`. No
+  tienen relación directa con el empaquetado. El perfil `war-build` tiene
   `activeByDefault=true` y se activa tambien con `-Dbuild=war`, pero esa
   activacion por defecto se cancela en cuanto se activa *cualquier otro*
   perfil del mismo POM por `-P` — incluidos los 4 de ejecucion, que no
@@ -132,3 +133,55 @@ Procedimiento acordado para cada commit nuevo que aparezca ahi:
   Spring falla al no poder resolver el placeholder si falta la variable
   es un razonamiento sobre el comportamiento documentado de Spring, no
   una prueba ejecutada y observada en esta sesion.
+
+
+## F1 — entorno local y arranque efectivo (20/10/2026)
+
+- Se usa `mysql:8.0.43`. La lectura directa de la sección 5.1 de Apuntes
+  Clase 7 reportada por el equipo identifica esa imagen en el despliegue de
+  la cátedra. Reutilizarla para desarrollo local es una decisión del equipo,
+  no una exigencia de Clase 3. No se valida como fuente el comando detallado
+  que una respuesta de consulta atribuyó a Clase 3 sin respaldo textual.
+- MySQL se publica en `127.0.0.1:3306`; Spring corre en el host y utiliza
+  `jdbc:mysql://localhost:3306/iw3_2026` bajo `mysqldev`. La base sin perfil
+  conserva `33306`; por ello la guía exige activar explícitamente `mysqldev`.
+  No se modifica `mysqlprod`, pensado para el servicio `mysql:3306`.
+- El volumen `iw3-local_mysql-data` conserva los datos al recrear el servicio.
+  No se usa `down -v`. Cambiar el archivo de variables no rota las contraseñas
+  de una base ya inicializada: credenciales y contenido del volumen deben
+  mantenerse coherentes.
+- `.env.mysql` contiene `DB_USERNAME`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`;
+  `.env.jwt` contiene `JWT_SECRET`. Son archivos locales ignorados, con
+  permisos 600 según la verificación del equipo. Compose lee el primero
+  mediante `--env-file`; Spring recibe las variables exportadas en su proceso.
+  El root de MySQL es para infraestructura; la aplicación usa `iw3_app`.
+- Tres intentos de arranque usaron la URL base `33306` porque no había perfil
+  Spring activo. La solución fue exportar `SPRING_PROFILES_ACTIVE=mysqldev`.
+  No se cambió el POM ni se agregaron dependencias. La comprobación de una
+  propiedad con `help:evaluate` no equivalía a verificar un perfil runtime.
+
+## F1 — correo y prueba de autenticación
+
+- `EmailBusiness` recibe el remitente desde `mail.from`. `MAIL_FROM` toma por
+  defecto `SMTP_USER`; no se impone una cuenta real ni un proveedor institucional.
+  `SMTP_HOST` y `SMTP_PORT` permiten reemplazar los defaults heredados.
+- `NOTIFY_TEST_RECIPIENT` no tiene destinatario real por defecto. Su valor vacío
+  **no es un interruptor de envío**: el código no omite el envío por estar vacío.
+  `EXPIRED_NOTIFICATION_ENABLED=false` evita que `Scheduler.expired()` consulte
+  productos y envíe correos. No deshabilita `EmailBusiness` globalmente.
+- Las pruebas locales usaron valores SMTP ficticios y no enviaron correo,
+  según el reporte de ejecución. Probar SMTP real y el remitente autorizado
+  queda fuera del cierre técnico de esta infraestructura local.
+- Se utilizó un usuario local `qa_f1_dfab890c` y el rol `ROLE_QA_TEST` para
+  probar autenticación. Al no existir alta de usuarios en la API inspeccionada
+  por el equipo, se generó BCrypt con la utilidad heredada y se insertaron
+  usuario, rol y relación directamente en la BD. Es preparación de datos de
+  prueba, no implementación del alta ni de los roles funcionales del integrador.
+- Se verificaron login y acceso protegido correctos, rechazo de contraseña
+  incorrecta, de JWT alterado y de acceso sin token. No se probaron expiración,
+  autorización por roles del dominio ni alta/recuperación de usuarios.
+- Graphify se ejecutó después de F0; sus resultados permanecen locales.
+  La exclusión se publicó en `62a9d53`. El grafo no reemplaza estas pruebas.
+
+La guía operativa y los límites de la evidencia están en
+`docs/desarrollo-local.md` y `docs/checkpoints/2026-10-20-04.md`.

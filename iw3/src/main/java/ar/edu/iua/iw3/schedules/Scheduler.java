@@ -51,12 +51,22 @@ public class Scheduler {
 	@Autowired
 	private EmailBusiness emailBusiness;
 
-	@Value("${expired.product.send.to:magm3333@gmail.com}")
+	@Value("${expired.product.send.to}")
 	private String expiredProductSendTo;
+
+	// Condicion de configuracion explicita para este job heredado: deshabilitado
+	// por defecto para no depender de que el repositorio de cli2 quede null
+	// segun el perfil activo.
+	@Value("${jobs.expired-notification.enabled:false}")
+	private boolean expiredNotificationEnabled;
 
 	@Async
 	@Scheduled(fixedDelayString = "${verify.product.expired:120}", initialDelay = 5, timeUnit = TimeUnit.SECONDS)
 	public void expired() {
+		if (!expiredNotificationEnabled) {
+			log.trace("Job de notificacion de productos vencidos deshabilitado (jobs.expired-notification.enabled=false)");
+			return;
+		}
 		if (productBusiness != null) {
 			log.info("Verificando productos expirados...");
 			Calendar c = Calendar.getInstance();
