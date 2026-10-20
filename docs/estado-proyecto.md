@@ -1,8 +1,11 @@
 # Estado del proyecto
 
-Último checkpoint: [`docs/checkpoints/2026-10-20-02.md`](checkpoints/2026-10-20-02.md).
-Fase activa: **F0** (inventario y setup). No cerrada todavía — ver sección
-"Cierre de F0" al final de este documento.
+Último checkpoint: [`docs/checkpoints/2026-10-20-03.md`](checkpoints/2026-10-20-03.md).
+Fase activa: **F1** (base local reproducible), pendiente de iniciar. **F0
+(inventario y setup) está cerrada** — ver sección "Cierre de F0" al final
+de este documento. Próximo paso de F1: verificar qué Docker y qué
+contenedores existen ya en esta máquina, antes de preparar un MySQL
+local.
 
 ## Repositorios
 
@@ -241,7 +244,20 @@ de F1. Esta aprobación evalúa la coherencia de los archivos recibidos;
 no es una nueva ejecución de las pruebas ni una certificación independiente
 de las transcripciones completas o del código, no incluidos en el ZIP.
 
-Queda guardar este bloque en un commit y respaldarlo en la rama de trabajo.
-Después puede iniciarse F1. El arranque completo, la prueba HTTP de login y
-la reproducción del entorno siguen pendientes. Las dudas de dominio se
-resuelven antes de implementar sus requisitos, sin bloquear el entorno local.
+El bloque documental quedó guardado y respaldado: commit `0ab399f` en
+`feature/setup-inicial`, publicado en `origin` (verificado con
+`git status -sb`/`git ls-remote`, sin repetir ninguna auditoría ni
+prueba). **F0 queda formalmente cerrada con esta revisión** — ver
+`docs/checkpoints/2026-10-20-03.md`.
+
+**F1 pendiente de iniciar.** El arranque completo, la prueba HTTP de
+login (autorizado / sin token / token inválido) y la reproducción
+documentada del entorno siguen pendientes, igual que todas las
+limitaciones y dudas de dominio ya registradas en los checkpoints
+(fecha de entrega 2026, inconsistencia de densidad, contrato de
+activación, metadatos de aceptación de alarma, stack/CI/hosting FE):
+cerrar F0 no las resuelve, solo las traslada a F1+ con su estado
+intacto. Primer paso concreto de F1, todavía no ejecutado: verificar qué
+Docker y qué contenedores existen ya en esta máquina antes de preparar
+un MySQL local (no asumir que no hay nada corriendo, no crear un
+contenedor nuevo sin revisar primero).
