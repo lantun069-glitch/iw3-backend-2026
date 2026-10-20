@@ -1,0 +1,645 @@
+# Matriz de requisitos
+
+Este documento es autosuficiente: cada ID tiene su descripción, alcance,
+fuente con ubicación, fase prevista, criterio de aceptación, estado,
+implementación y evidencia. No depende de ningún archivo local para
+entenderse.
+
+Estados permitidos: **pendiente**, **en curso**, **implementado sin
+verificar**, **verificado**, **bloqueado**, **no aplicable con
+justificación**. Los requisitos funcionales están en **pendiente**: esta etapa es
+inventario y documentación, no implementación. TP36, de preparación
+para la defensa, está en curso; todavía no se practicaron las preguntas. Las filas de equipo/infraestructura (EQ) sí tienen
+avance real.
+
+Fuentes citadas: **T1** = transcripción "Lectura de la consigna del
+trabajo integrador" (texto completo leído, cuaderno de materia,
+fuente `59f2c5bf-3d78-4e71-a60a-153dbecb9c27`). **T2** = transcripción
+"Criterios de aprobación del trabajo integrador" (texto completo leído,
+misma fuente de cuaderno, fuente `fa7832ee-0bc8-4933-8319-35b122979a28`).
+Las citas son fragmentos literales entre comillas; donde no hay cita
+literal disponible se marca **DATO FALTANTE** en vez de inventar una.
+Detalle de literal/interpretación/duda para densidad, clave de activación
+y descarte de lecturas: `docs/fuentes.md`.
+
+## Segundo parcial y final
+
+### TP01 — Sistema completo en la VM asignada
+- Descripción: backend, persistencia, frontend e infraestructura de
+  despliegue en la máquina virtual asignada al grupo.
+- Alcance: final (objetivo general del proyecto).
+- Fuente: T1, apertura — "Diseñar y desarrollar un sistema informático
+  compuesto por un backend, un sistema de persistencia de datos, un
+  front[end] y una infraestructura de despliegue que tiene que ser
+  desarrollada en la máquina virtual que ha sido asignada a cada grupo."
+- Fase prevista: F1 / F7 / F8.
+- Criterio de aceptación: circuito accesible desde la VM, con
+  persistencia que sobrevive a un reinicio del proceso/contenedor.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP02 — Datos recibidos para crear una orden
+- Descripción: número de orden, camión, chofer, cliente, producto, fecha
+  de carga prevista y preset.
+- Alcance: segundo parcial y final.
+- Fuente: T1, punto 1 — "¿Cuál es los datos recibidos que deben
+  sincronizarse con nuestro backend? Un número de orden... un camión...
+  datos de chofer... datos del cliente... datos del producto... fecha de
+  carga prevista... el preset."
+- Fase prevista: F2.
+- Criterio de aceptación: un POST con esos 7 campos crea una orden en
+  estado 1; falta de un campo obligatorio devuelve error.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP03 — Sincronización por código externo
+- Descripción: las entidades recibidas de sistemas externos se
+  identifican por un código externo tipo String; si no existen se crean,
+  si existen se actualizan con los datos recibidos.
+- Alcance: segundo parcial y final.
+- Fuente: T1 — "representando con una cadena de texto, un string, para
+  brindar más flexibilidad..."; "si no existen, las tengo que agregar y
+  si existen deberían actualizar si vienen datos cambiados."
+- Fase prevista: F2.
+- Criterio de aceptación: mismo código externo no duplica entidad; un
+  cambio de dato (ej. patente) se refleja en una segunda recepción.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP04 — Camión y cisternas
+- Descripción: camión con patente, descripción opcional y una lista de
+  cisternas, cada una con nombre/número y capacidad; la capacidad total
+  se calcula, no se almacena.
+- Alcance: segundo parcial y final.
+- Fuente: T1, anexo — "pretendo mínimo que tenga un camión, una patente,
+  una descripción... y [una lista de cisternas]... puede tener varias...
+  a cada [cisterna] tengo que darle al menos un nombre y un número... y
+  la capacidad... el total no se almacena." La palabra transcripta es
+  "sistema"; INTERPRETACIÓN DEL EQUIPO: por contexto es "cisterna" (ver
+  `docs/fuentes.md`).
+- Fase prevista: F2.
+- Criterio de aceptación: un camión con 2 cisternas (ej. 10000+5000)
+  devuelve capacidad total 15000 calculada en el momento, no leída de una
+  columna.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP05 — Chofer, cliente y producto: atributos mínimos
+- Descripción: chofer (nombre+apellido obligatorios, documento
+  opcional), cliente (razón social obligatoria, contacto opcional),
+  producto (nombre obligatorio, descripción opcional).
+- Alcance: segundo parcial y final.
+- Fuente: T1, anexo — "datos del [chofer], nombre y apellido, opcional
+  el documento, datos del cliente, razón social... y un dato de contacto
+  que es opcional, el producto tiene que tener mínimo un nombre y
+  opcionalmente una descripción."
+- Fase prevista: F2.
+- Criterio de aceptación: crear con los opcionales ausentes funciona;
+  falta de un obligatorio rechaza con error.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP06 — Número de orden entero único, distinto del ID interno
+- Descripción: el número de orden es un entero único recibido
+  externamente; no debe confundirse ni sustituirse por el ID autogenerado
+  del ORM.
+- Alcance: segundo parcial y final, con una decisión del equipo sobre el
+  modelo de campos (ver abajo).
+- Fuente: T1 — "el número de orden, que es un identificador único número
+  entero que se lo recibíamos de forma externa." DECISIÓN DEL EQUIPO
+  (no confirmada contra consigna escrita): usar campos separados
+  `orderNumber` (el entero recibido) y un ID interno autogenerado,
+  distintos entre sí.
+- Fase prevista: F2.
+- Criterio de aceptación: dos recepciones con el mismo número de orden no
+  crean dos filas distintas; el ID interno nunca se expone como "número
+  de orden" en la API.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP07 — Creación en estado 1
+- Descripción: toda orden recibida se crea en estado 1 (pendiente de
+  pesaje inicial).
+- Alcance: segundo parcial y final.
+- Fuente: T1 — "una vez recibidos estos datos, la orden se crea, y en
+  estado uno."
+- Fase prevista: F2.
+- Criterio de aceptación: el JSON de entrada no puede forzar otro estado
+  inicial distinto de 1.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP08 — Tara, timestamp y clave de activación (transición 1→2)
+- Descripción: al registrar la tara (pesaje inicial) se genera una clave
+  entera aleatoria de 5 dígitos asociada a la orden, y la orden pasa a
+  estado 2.
+- Alcance: segundo parcial y final.
+- Fuente: T1, punto 2 — "se registra el pesaje del camión vacío que es
+  la tara. Se agrega una contraseña de activación compuesta por un número
+  entero de cinco dígitos... al azar... Al completar este paso, la orden
+  pasa a estado dos." CONFIRMADO (ver `docs/fuentes.md`): la clave se
+  genera en este mismo paso, no en otro momento.
+- Fase prevista: F3.
+- Criterio de aceptación: clave generada está en el rango [10000,99999];
+  tara registrada solo si la orden está en estado 1; se persiste la
+  fecha/hora del pesaje inicial; tras la operación la orden queda en estado 2.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP09 — Activación: validar clave y devolver preset
+- Descripción: una operación de activación valida la clave de 5 dígitos
+  y, si coincide, devuelve el preset al instrumento de carga.
+- Alcance: segundo parcial y final.
+- Fuente: T1 — "la contraseña de activación permite habilitar el
+  instrumento de carga que junto con el preset controla la bomba... si
+  coincide con esa [clave] que generó nuestro sistema le va a enviar el
+  preset a ese aparato."
+- Fase prevista: F3.
+- Criterio de aceptación: clave correcta devuelve el preset numérico;
+  clave incorrecta no lo devuelve y no inicia la carga.
+- DATO FALTANTE: el contrato exacto de esta llamada (cómo se identifica
+  la orden — por número de orden, por la clave sola, por ambos — y qué
+  pasa ante colisión de claves entre órdenes simultáneas) no está
+  definido en T1/T2; queda como decisión de diseño pendiente antes de
+  implementar.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP10 — Telemetría solo durante estado 2
+- Descripción: recepción de masa acumulada (kg), densidad, temperatura
+  (°C) y caudal (kg/h), con marca de tiempo de recepción, únicamente
+  mientras la orden está en estado 2.
+- Alcance: segundo parcial y final.
+- Fuente: T1, punto 3 (recepción de datos en tiempo real durante la
+  carga).
+- Fase prevista: F3.
+- Criterio de aceptación: lectura aceptada en estado 2; rechazada en
+  estados 1, 3 y 4.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP11 — Descarte de lecturas inválidas
+- Descripción: se descartan lecturas con caudal ≤ 0, masa acumulada ≤ 0,
+  o masa estrictamente menor que la última masa válida.
+- Alcance: segundo parcial y final.
+- Fuente: T1 — "se deben descartar los registros cuyo caudal sea menor
+  igual que 0... y cuando la masa acumulada sea menor igual que 0...
+  tampoco tengo que almacenar una masa menor que el valor anterior."
+- Fase prevista: F3.
+- Criterio de aceptación: casos límite probados; una masa igual a la
+  anterior **no** se descarta por esta regla (la fuente dice "menor", no
+  "menor o igual", para ese caso puntual). Si la masa es positiva e igual a la última válida y el caudal es
+  positivo, la igualdad no introduce una regla adicional de descarte.
+  El almacenamiento del detalle sigue la frecuencia aplicable.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP12 — Snapshot de últimos valores válidos
+- Descripción: el sistema mantiene siempre el último valor válido de
+  masa, densidad, temperatura y caudal, con su propio timestamp,
+  independientemente de si esa lectura también se guarda en el detalle
+  histórico.
+- Alcance: segundo parcial y final.
+- Fuente: T1 — "el sistema debe conservar solo el último valor válido de
+  cada atributo... siempre va a tener que sobreescribir ese último valor
+  en algún lado para que esté muy accesible."
+- Fase prevista: F3 / F6.
+- Criterio de aceptación: una lectura válida actualiza el snapshot aunque
+  no genere un registro de detalle (por la frecuencia configurada).
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP13 — Detalle histórico ligado a la orden
+- Descripción: cada registro de detalle (masa, densidad, temperatura,
+  caudal, timestamp) queda asociado a una orden específica.
+- Alcance: segundo parcial y final.
+- Fuente: T1, anexo (mismos cuatro datos que el snapshot, pero como
+  histórico).
+- Fase prevista: F3.
+- Criterio de aceptación: el histórico de dos órdenes distintas no se
+  mezcla.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP14 — Frecuencia de almacenamiento configurable
+- Descripción: la frecuencia de persistencia del detalle puede
+  configurarse en base de datos, distinta de la frecuencia de recepción.
+- Alcance: **opcional en el segundo parcial** (se puede guardar cada
+  lectura válida), **obligatoria en el final**.
+- Fuente: T1 — ejemplo "si los datos se reciben cada un segundo pero se
+  decide almacenar cada 10 segundos, en un minuto voy a recibir 60
+  registros de los cuales solo voy a guardar 6." T2 — "esto es opcional
+  por ahora... es válido almacenar todos los registros... conforme se
+  reciban... esto obviamente... lo voy a pedir para el final."
+- Fase prevista: F6 (o F3 si se adelanta como opcional explícito).
+- Criterio de aceptación: con un intervalo configurado, una serie de
+  lecturas de prueba produce la cantidad esperada de registros, sin
+  afectar la frecuencia de recepción ni el refresco de pantalla.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP15 — Cierre explícito 2→3
+- Descripción: un endpoint explícito cierra la orden, bloqueando nuevas
+  lecturas de detalle.
+- Alcance: segundo parcial y final.
+- Fuente: T1, punto 4 — "debe implementarse un endpoint que permita
+  cerrar la orden bloqueando la recepción de nuevos datos de detalle...
+  la orden pasa a estado 3."
+- Fase prevista: F4.
+- Criterio de aceptación: una lectura enviada después del cierre no
+  modifica snapshot ni detalle, y devuelve un error explícito.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP16 — Pesaje final 3→4 con conciliación en la misma respuesta
+- Descripción: un servicio recibe el pesaje final, cambia la orden a
+  estado 4 y devuelve la conciliación en esa misma operación.
+- Alcance: segundo parcial y final.
+- Fuente: T1, punto 5 — "una vez que se recibe ese pesaje final, ese
+  mismo servicio va a cambiar la orden a estado número 4... además debe
+  devolver una conciliación con los valores calculados."
+- Fase prevista: F4.
+- Criterio de aceptación: la respuesta de esa operación incluye la
+  conciliación; se rechaza si la orden no está en estado 3.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP17 — Consulta de conciliación, solo en estado 4
+- Descripción: endpoint separado para consultar la conciliación en
+  cualquier momento posterior, pero solo para órdenes en estado 4.
+- Alcance: segundo parcial y final.
+- Fuente: T1 — "la conciliación podrá solicitarse en cualquier momento,
+  pero solo para órdenes en estado 4 a través de un endpoint
+  específico."
+- Fase prevista: F4.
+- Criterio de aceptación: disponible repetidas veces en estado 4;
+  rechazada en estados 1, 2 y 3.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP18 — Cálculo de la conciliación
+- Descripción: tara, bruto (pesaje final), neto = bruto − tara, producto
+  cargado = última masa acumulada, diferencia = neto − producto cargado.
+- Alcance: segundo parcial y final.
+- Fuente: T1 — ejemplo numérico con tara 40.000 y pesaje final 50.000 →
+  neto 10.000; "esa diferencia puede existir, y ahí la decisión... de qué
+  se hace con esa diferencia no es un problema nuestro sino una decisión
+  humana."
+- Fase prevista: F4.
+- Criterio de aceptación: comparación contra un cálculo manual; una
+  diferencia distinta de 0 **no** causa rechazo automático del sistema.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP19 — Promedios de temperatura, densidad y caudal
+- Descripción: promedio de cada variable sobre el detalle almacenado,
+  incluido en la conciliación.
+- Alcance: **opcional en el segundo parcial** (se admite el último valor
+  recibido en su lugar), **obligatoria en el final**.
+- Fuente: T1 — "el promedio de temperatura, según los datos
+  almacenados... el promedio de la densidad y el promedio de caudal." T2
+  — "también es opcional el cálculo de valores medios... podrá
+  almacenarse simplemente el último valor recibido... aunque esto sí lo
+  voy a requerir para el examen final."
+- Fase prevista: F6 (o F4 si se adelanta como opcional explícito).
+- Criterio de aceptación: promedio calculado contra un conjunto de
+  detalle conocido; si no hay muestras almacenadas, la ausencia de
+  promedio se documenta explícitamente, no se devuelve 0 como si fuera un
+  promedio real.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP20 — Timestamps de cada evento del ciclo
+- Descripción: fecha/hora de recepción inicial, de pesaje inicial, de
+  inicio de carga, de fin de carga, de pesaje final.
+- Alcance: segundo parcial y final.
+- Fuente: T1, anexo — "la fecha y hora de recepción inicial... la fecha
+  y hora en que se recibe el pesaje inicial... la fecha y hora de el
+  inicio... la fecha y hora de fin de carga... la fecha y hora del
+  pesaje final."
+- Fase prevista: F2–F4.
+- Criterio de aceptación: cada evento queda persistido con su propio
+  timestamp; documentar qué evento exacto dispara cada marca (ej.: no
+  igualar automáticamente "tara" con "inicio real de carga", porque T1
+  los describe como pasos distintos).
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP21 — Transiciones de estado unidireccionales y auditadas
+- Descripción: los estados avanzan 1→2→3→4 sin saltos ni retrocesos; cada
+  transición queda registrada.
+- Alcance: segundo parcial y final.
+- Fuente: la secuencia 1→2→3→4 sin saltos está descripta en T1 de forma
+  consistente en los 5 puntos del proceso. DATO FALTANTE: no se encontró
+  en T1/T2 una cita literal que exija registrar explícitamente "usuario o
+  proceso" y "observación" en cada transición de estado (más allá de los
+  timestamps de TP20); eso es una práctica de auditoría razonable, no un
+  requisito confirmado textualmente todavía.
+- Fase prevista: F2–F4.
+- Criterio de aceptación: un intento de salto o retroceso de estado se
+  rechaza; se puede consultar la secuencia de transiciones de una orden.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP22 — Sin interfaz gráfica para el segundo parcial
+- Descripción: los puntos 1 a 5 se entregan como API, sin ninguna
+  pantalla propia, para la presentación del segundo parcial.
+- Alcance: segundo parcial (exclusión explícita; la interfaz sí se exige
+  en el final, ver TP30–TP35).
+- Fuente: T2 — "Deberán implementarse sin interfaz gráficas... yo no
+  quiero interfaz gráficas para el segundo parcial, todo va a [ser API]."
+- Fase prevista: F5.
+- Criterio de aceptación: demostración completa de los 5 puntos ejecutada
+  desde Postman, sin pantallas propias.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP23 — Documentación OpenAPI/Swagger
+- Descripción: documentación técnica de la API con OpenAPI/Swagger.
+- Alcance: obligatoria en el segundo parcial; mantenerla actualizada en
+  el final.
+- Fuente: T2 — "la documentación técnica deberá realizarse utilizando...
+  Swagger."
+- Fase prevista: F2–F5.
+- Criterio de aceptación: operaciones, esquemas, unidades y errores
+  documentados coinciden con el comportamiento real de la API.
+- Estado: pendiente. Implementación: —. Evidencia: `config/OpenApiConfig.java`
+  ya provee el esquema de seguridad Bearer JWT, reutilizable tal cual
+  (ver `docs/estado-proyecto.md`); falta documentar los endpoints de
+  dominio, que todavía no existen.
+
+### TP24 — Colección Postman
+- Descripción: colección Postman que prueba y valida las APIs
+  desarrolladas.
+- Alcance: obligatoria en el segundo parcial; ampliar en el final.
+- Fuente: T2 — "una colección [Postman] que permita probar y validar las
+  [APIs] desarrolladas."
+- Fase prevista: F2–F5.
+- Criterio de aceptación: la colección se importa sin errores, usa
+  variables documentadas (no credenciales fijas) y cada request es
+  ejecutable contra el entorno local.
+- Estado: pendiente. Implementación: —. Evidencia: Postman CLI verificado
+  disponible (`1.75.0`), todavía sin usar.
+
+### TP25 — Simulación automatizada del circuito
+- Descripción: runner/tests de Postman que simulan el circuito completo
+  de una orden, de punta a punta.
+- Alcance: opcional, recomendada explícitamente por el docente en el
+  segundo parcial.
+- Fuente: T2 — "una simulación del circuito completo... opcional, pero es
+  muy [valiosa], de un valor agregado muy grande... se recomienda
+  investigar la funcionalidad de test de [Postman]... les he agregado un
+  video." DATO FALTANTE: el contenido de ese video no es accesible desde
+  esta sesión.
+- Fase prevista: F5.
+- Criterio de aceptación: el runner encadena número de orden/clave/token
+  automáticamente y valida cada respuesta, sin depender de variables
+  globales compartidas entre ejecuciones.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP26 — Presentación de 15-20 min con preguntas individuales
+- Descripción: presentación operativa del circuito el día de la entrega,
+  con preguntas individuales a cada integrante.
+- Alcance: criterio de aprobación del segundo parcial.
+- Fuente: T2 — "el día 11 cada grupo va a tener disponible unos 15, 20
+  minutos para presentar... tiene que estar todo listo y tiene que estar
+  funcionando en ese momento... la persona que no me contesta no
+  aprueba."
+- Fase prevista: F5 / F8.
+- Criterio de aceptación: ensayo cronometrado, entorno funcionando antes
+  de empezar a presentar, preguntas cruzadas a cada integrante.
+- DATO FALTANTE: la fecha real de entrega 2026. T1 menciona "martes 11 de
+  noviembre de 25" (2025); esa fecha corresponde a la cursada anterior
+  (el audio es de 2025, reutilizado como material), no a este ciclo.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP27 — Roles que regulan el consumo de la API
+- Descripción: roles de usuario que habilitan o restringen operaciones
+  de la API.
+- Alcance: final.
+- Fuente: T2 — "seguridad y roles de acceso van a tener que definir e
+  implementar roles de usuario que regulen el consumo de [la API]."
+- Fase prevista: F6.
+- Criterio de aceptación: matriz de permisos por operación, con pruebas
+  de acceso permitido/denegado por rol.
+- Estado: pendiente. Implementación: —. Evidencia: las entidades `User` y
+  `Role` (con `UserDetails` de Spring Security) ya existen en la base
+  heredada y son reutilizables directamente, sin modelo nuevo (ver
+  `docs/estado-proyecto.md`).
+
+### TP28 — Alarma de temperatura configurable
+- Descripción: umbral de temperatura y destinatarios configurables;
+  correo cuando la temperatura medida supera estrictamente el umbral.
+- Alcance: final.
+- Fuente: T2 — "deberá añadirse una alarma configurable que envíe un
+  correo electrónico cuando la temperatura registrada supera un umbral
+  predefinido. Supongamos que definimos 33 grados... el valor del umbral
+  y los correos de destino deberán ser configurables."
+- Fase prevista: F6.
+- Criterio de aceptación: con umbral=33, una lectura de 33 no dispara y
+  una de 33,1 sí (umbral estrictamente superado, no igualado).
+- Estado: pendiente. Implementación: —. Evidencia: `util/EmailBusiness.java`
+  ya existe y es reutilizable para el envío; el remitente está
+  hardcodeado al dominio del profesor (`noreply@magm.com.ar`), a decidir
+  si se cambia (ver `docs/estado-proyecto.md`).
+
+### TP29 — No repetir alarma pendiente; rehabilitar tras aceptación
+- Descripción: mientras una alarma esté pendiente de aceptación no se
+  reenvía correo para ese caso; tras la aceptación por un usuario
+  autorizado, puede volver a alertarse si la condición se repite.
+- Alcance: final.
+- Fuente: T2 — "una vez enviada una alarma, no debe enviarse nuevamente
+  hasta que no sea aceptada por un usuario autorizado... si ese problema
+  se vuelve a repetir después de la aceptación, ahí sí puedo enviar
+  nuevamente un correo."
+- Fase prevista: F6.
+- Criterio de aceptación: una secuencia de lecturas altas sin aceptación
+  genera un único correo; tras aceptar, una nueva lectura que vuelva a
+  superar el umbral genera un nuevo correo.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP30 — Login web y administración/monitoreo de órdenes
+- Descripción: autenticación de usuarios y administración/monitoreo de
+  órdenes desde la interfaz gráfica.
+- Alcance: final.
+- Fuente: T2 — "autenticación de usuarios, administración y monitoreo en
+  tiempo real de las órdenes de carga."
+- Fase prevista: F7.
+- Criterio de aceptación: login real contra el backend, logout, sesión
+  mientras dure el token, operaciones visibles según el rol.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP31 — Datos mostrados por orden en el monitoreo, con filtros
+- Descripción: número de orden, estado, [frase con ruido de ASR, ver
+  abajo], masa, última temperatura/densidad/caudal; filtros y
+  ordenamiento por estado y otros criterios.
+- Alcance: final.
+- Fuente: T2 — "mostrando el número de [orden] del estado actual, el
+  cambio en el precez, la carga actual, la última temperatura y densidad
+  y caudal, filtros y ordenamiento por el estado y otros criterios."
+  INTERPRETACIÓN DEL EQUIPO: "el cambio en el precez" tiene ruido de ASR
+  en la fuente original (no es un error de esta transcripción); por
+  contexto podría ser "el camión, el preset", sin confirmar.
+- Fase prevista: F7.
+- Criterio de aceptación: UI comparada campo a campo contra la respuesta
+  real del backend; filtros/orden probados con datos de ejemplo.
+- DATO FALTANTE: confirmar la frase exacta con la consigna escrita o el
+  docente antes de decidir si se muestran camión y/o preset.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP32 — ETA (tiempo estimado de llegada al preset)
+- Descripción: cálculo de ETA con preset, masa acumulada y caudal por
+  hora.
+- Alcance: final.
+- Fuente: T2 — "tienen que calcular el [ETA]... a eso lo van a calcular
+  con el preset... la masa acumulada... y el caudal por hora."
+- Fase prevista: F7.
+- Criterio de aceptación: `ETA_min = max(preset_kg - masa_kg, 0) /
+  caudal_kg_h * 60` contra un ejemplo manual; caudal=0 → "no estimable";
+  masa≥preset → ETA=0 sin forzar cierre automático de la orden.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP33 — Tiempo transcurrido, visible solo en estado 2
+- Descripción: tiempo transcurrido desde el inicio de la carga, visible
+  únicamente mientras la orden está en estado 2.
+- Alcance: final.
+- Fuente: T2 — "el tiempo transcurrido desde que inicia la carga... eso
+  también lo tengo que estar mostrando siempre en algún lado... solamente
+  mientras una orden está en el estado 2."
+- Fase prevista: F7.
+- Criterio de aceptación: contador visible y corriendo solo en estado 2 y con inicio real
+  de carga registrado; mientras no haya iniciado, mostrar “sin iniciar”
+  como convención propuesta del equipo, sin contar desde la tara;
+  no confundir "tara" con "inicio real de carga" (distinción general de
+  T1, aplicada aquí). DATO FALTANTE: T2 no dice explícitamente qué
+  mostrar antes del estado 2 (ej. "sin iniciar"); eso es una convención a
+  definir por el equipo, no un requisito confirmado.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP34 — Visualización y aceptación de alarmas desde la UI
+- Descripción: gestión de alarmas de temperatura visible en la UI, con
+  aceptación por parte de un usuario autorizado.
+- Alcance: final.
+- Fuente: T2 — "tiene que estar disponible la gestión de alarmas de
+  temperatura, se debe visualizar [las] alarmas en la interfaz
+  gráfica... vamos a realizar la aceptación de la alarma por el usuario,
+  el registro de usuario fecha ahora observación e opcional." Frase
+  ambigua en la fuente original (no se puede determinar con certeza qué
+  campos son opcionales); DECISIÓN DEL EQUIPO propuesta, no confirmada:
+  registrar usuario y fecha/hora siempre, observación opcional.
+- Fase prevista: F7.
+- Criterio de aceptación: un usuario autorizado acepta y el backend
+  persiste usuario + fecha/hora; un usuario sin permiso no puede aceptar.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP35 — Conciliaciones visibles solo en estado 4
+- Descripción: la UI muestra conciliaciones únicamente para órdenes en
+  estado 4.
+- Alcance: final.
+- Fuente: T2 — "la visualización de conciliaciones, disponible solo para
+  orden en el estado 4, que son las finalizadas."
+- Fase prevista: F7.
+- Criterio de aceptación: la UI solo muestra la vista en estado 4; el
+  backend valida el estado de forma independiente de lo que la UI
+  oculte.
+- Estado: pendiente. Implementación: —. Evidencia: —.
+
+### TP36 — Comprensión global y evaluación individual
+- Descripción: cada integrante debe poder explicar el funcionamiento
+  completo del sistema, no solo su rol principal.
+- Alcance: segundo parcial y final (transversal a toda la evaluación).
+- Fuente: T2 — "todos los integrantes deben comprender el funcionamiento
+  completo del sistema, ya que la evaluación va a ser individual...
+  Asimismo, si se trabaja en equipo cada miembro deberá compartir con el
+  resto del grupo lo que haya implementado... la persona que no me
+  contesta no aprueba." También confirma que grupos de hasta 4 personas
+  son aceptados ("tenemos un grupo de 4, no hay problema con eso").
+- Fase prevista: todas.
+- Criterio de aceptación: cada integrante puede responder preguntas sobre
+  cualquier parte del sistema; ver `docs/defensa.md`.
+- Estado: en curso (el documento de defensa ya existe, pero ninguna
+  pregunta fue practicada todavía por una persona real).
+- Implementación: `docs/defensa.md` con preguntas propuestas por unidad.
+- Evidencia: —.
+
+## Equipo / infraestructura
+
+### EQ01 — Dos repos, flujo de ramas, versiones identificables
+- Descripción: dos repositorios hermanos (BE/FE), con ramas
+  `feature/*` → `develop` → `main`, integrados vía PR.
+- Alcance: regla/decisión del equipo (práctica de desarrollo, no un
+  requisito textual de la consigna del integrador).
+- Fuente: decisión del equipo, alineada con la práctica de control de
+  versiones vista en las clases de frontend sobre flujo profesional de
+  desarrollo (rama por unidad de trabajo, historial y PR antes de
+  integrar). No se leyó el documento completo de esa clase en esta
+  sesión; cita puntual DATO FALTANTE.
+- Fase prevista: F0–F8.
+- Criterio de aceptación: remotos, ramas e historial coherentes en ambos
+  repos, con al menos una PR real revisada antes de llegar a `develop`.
+- Estado: en curso. Implementación: dos repos creados, ramas
+  `feature/*`/`develop`/`main` definidas, `feature/setup-inicial`
+  publicada en backend, `main` publicada en frontend (solo
+  `.gitignore`). Evidencia: `git log`/`git branch -vv` en ambos repos
+  (detalle en `docs/estado-proyecto.md`). Falta la primera PR real a
+  `develop`.
+
+### EQ02 — Simplicidad y decisiones trazables
+- Descripción: cada cambio no trivial tiene una fuente citada o una
+  decisión de equipo documentada, sin agregar complejidad por
+  anticipación (librerías, patrones o servicios no pedidos por la
+  consigna).
+- Alcance: regla del equipo.
+- Fuente: decisión del equipo (criterio de trabajo adoptado desde el
+  inicio del proyecto).
+- Fase prevista: todas.
+- Criterio de aceptación: `docs/decisiones.md` contiene la justificación
+  de cada decisión no obvia.
+- Estado: en curso. Implementación: `docs/decisiones.md` con el
+  saneamiento de credenciales, el procedimiento de sincronización con el
+  repositorio del profesor, y los hallazgos de esta sesión. Evidencia:
+  el propio archivo.
+
+### EQ03 — Checkpoint por sesión, con auditoría y reanudación
+- Descripción: cada sesión de trabajo relevante deja un checkpoint con
+  estado Git real, verificaciones ejecutadas y próximo paso.
+- Alcance: regla del equipo (práctica de continuidad entre sesiones).
+- Fuente: decisión del equipo.
+- Fase prevista: todas.
+- Criterio de aceptación: existe un archivo de checkpoint por sesión
+  relevante, con estado Git verificado con comandos reales, no supuesto.
+- Estado: verificado. Implementación: `docs/checkpoints/2026-10-20-01.md`
+  y `docs/checkpoints/2026-10-20-02.md`. Evidencia: los propios archivos,
+  contrastados contra `git status`/`git log` real en cada sesión.
+
+## FE: prácticas y criterios por confirmar
+
+Fuente: cuaderno "Ingeniería Web III FE" (28 fuentes: 13 carpetas 01-13,
+cada una con un documento y una presentación, más dos notas sueltas).
+
+### Las dos notas sueltas, leídas en esta sesión
+
+- **"Les comparto la información correspondiente al pr…"**: aviso del
+  **primer parcial** de la materia (jueves 24/9/2026), escrito,
+  individual, multiple choice (50 preguntas), sobre Flujo profesional,
+  Componentes, Estado y formularios, Renderizado dinámico, Ciclo de vida
+  y consumo de APIs, Routing y Estado Global. **No aplica al
+  integrador**: evaluación teórica individual separada, ya rendida a la
+  fecha de esta sesión. No agrega ninguna obligación de entrega sobre el
+  proyecto.
+- **"Todas las notas, 22/9/2026"**: apunte de repaso consolidado para ese
+  mismo primer parcial (bloques teóricos 1 a 6). **No es un entregable**,
+  es material de estudio. Contiene criterios de cátedra reutilizables
+  como referencia técnica para F7: un componente nunca hace
+  `fetch`/`axios` directo (se delega a una capa `/services`), la petición
+  inicial se dispara al finalizar el montaje (`onMounted`/`useEffect`), y
+  Axios con interceptores inyecta el header `Authorization: Bearer`. No
+  obliga a usar React/Vue/Axios específicamente para el integrador; es
+  contexto de cómo se enseña el patrón, no una obligación de la consigna.
+
+### Carpetas 01-13 (sin leer el contenido completo todavía)
+
+| Carpeta | Obligación de la práctica | Aplicable al integrador | Estado |
+| --- | --- | --- | --- |
+| 01 Presentación / 02 Flujo profesional | DATO FALTANTE (no se leyó el documento completo) | Proceso con IA supervisada ya en uso en este proyecto | Pendiente de leer antes de confirmar entregables de proceso |
+| 03 Componentes | DATO FALTANTE | No directamente; referencia de patrón de componentes para F7 | Pendiente |
+| 04 Estado y formularios | DATO FALTANTE | Login/logout aplica (TP30) | Pendiente |
+| 05 Renderizado dinámico | DATO FALTANTE | Filtros/orden de órdenes (TP31) aplica | Pendiente |
+| 06 Ciclo de vida y APIs | DATO FALTANTE | Consumo del backend real en F7; ver criterios ya leídos en "Todas las notas" arriba | Pendiente |
+| 07 Routing y estado global | DATO FALTANTE | Rutas protegidas por rol aplica | Pendiente |
+| 08 CRUD profesional | DATO FALTANTE | Parcial: solo operaciones realmente permitidas por el dominio, no CRUD libre | Pendiente |
+| 09 Formularios profesionales | DATO FALTANTE | Confirmar si alguna librería es exigida por evaluación FE o es libre | Pendiente |
+| 10 Arquitectura Frontend | DATO FALTANTE | Estructura de carpetas aplica | Pendiente |
+| 11 UI profesional | DATO FALTANTE | UI del integrador aplica; librería a confirmar según stack elegido | Pendiente |
+| 12 Performance | DATO FALTANTE | Si se exige informe de performance, aplicarlo sobre el integrador | Pendiente |
+| 13 Testing y Deploy | DATO FALTANTE | Plan de pruebas aplica; hosting en potencial conflicto con la VM asignada | Pendiente, bloquea decisión de F8 |
+| 14 Seguridad de frontend | DATO FALTANTE (carpeta reportada vacía, sin fuente en el cuaderno) | — | No hay contenido que leer |
+
+## Ambigüedades que quedan igual tras esta revisión
+
+Siguen sin resolver con la lectura de T1/T2: contrato exacto de
+activación/colisión de clave (TP09), alcance de la alarma por orden vs.
+global, metadatos exactos de aceptación de alarma (TP34), stack/CI/
+hosting del frontend (bloqueado también por la carpeta 13 de la tabla de
+arriba). Sí se resolvieron con esta lectura: el momento de generación de
+la clave (TP08) y varias precisiones de conciliación/descarte (TP11,
+TP18). La inconsistencia de densidad (rango 0-1 vs. unidad kg/m³) sigue
+como duda pendiente, no resuelta — ver `docs/fuentes.md`.

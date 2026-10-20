@@ -26,30 +26,109 @@
   (placeholder no resuelto) o, en el caso de `JWT_SECRET`, una validacion
   explicita en `SecurityConfiguration` rechaza un valor vacio.
 
-## Importacion de futuras actualizaciones de `upstream`
+## Importacion de futuras actualizaciones del repositorio del profesor
 
-Riesgo: si se hace `git fetch upstream` seguido de un merge o rebase
-directo contra una rama ya publicada con historial saneado, los commits
-nuevos del profesor pueden volver a traer valores hardcodeados (los mismos
-u otros nuevos). Un `git cherry-pick` normal seguido de un commit
-correctivo tampoco alcanza: el commit del cherry-pick ya habria quedado
-creado con el secreto adentro, aunque un commit posterior lo corrija en el
-arbol de trabajo.
+**Donde se puede consultar el repositorio del profesor hoy:** solo desde
+`iw3-backend` (el clon original, intacto, que tiene configurado el
+remoto `upstream` apuntando a `magm3333/iw3_2026`). La copia de trabajo
+activa, `iw3-backend-sanitized`, **no tiene `upstream` configurado**
+— solo tiene `origin` (el repositorio propio del equipo). No se debe
+presentar `git fetch upstream` como un comando disponible parado en
+`iw3-backend-sanitized` sin aclarar que primero habria que agregar ese
+remoto ahi (y evaluar si corresponde hacerlo, dado el punto siguiente).
 
-Procedimiento acordado:
+**Por qué no se integra directamente el historial original:** el
+saneamiento cambia los hashes de los commits afectados y sus descendientes;
+no implica necesariamente que todos los commits anteriores hayan cambiado.
+Un merge o un rebase sobre el historial original podría volver a hacer
+alcanzables los commits con valores eliminados. Por decisión del equipo,
+no se hace merge, pull ni rebase desde la base original hacia las ramas
+saneadas. Se importan únicamente cambios revisados, sin sus ancestros.
 
-1. `git fetch upstream` sin integrar nada todavia.
-2. Revisar el diff de los commits nuevos (`git log upstream/main ^main`,
-   `git show <commit>`) buscando credenciales o configuracion insegura con
-   el mismo criterio usado en esta revision (grep de `password`, `secret`,
-   `smtp`, defaults embebidos, etc.).
-3. Si un commit nuevo toca archivos sensibles, traerlo con
-   `git cherry-pick -n <commit>` (sin crear el commit todavia), corregir el
-   contenido en el arbol de trabajo (por ejemplo, volver a aplicar el mismo
-   patron de variables de entorno) y recien ahi hacer `git commit` con un
-   mensaje que documente la correccion. Asi el valor sensible nunca llega a
-   formar parte de un commit, ni siquiera de uno intermedio.
-4. Si un commit nuevo no toca nada sensible, se puede integrar normalmente.
-5. Nunca hacer `push --force` sobre una rama ya publicada para "arreglar"
+**Como identificar que hay novedades:** no sirve `git log upstream/main
+^main` comparando contra el `main` de la copia saneada (sus hashes ya no
+son los mismos que los de `upstream`, esa comparacion de ancestria no da
+un resultado correcto). En cambio, se usa como referencia fija el ultimo
+commit ORIGINAL (sin reescribir) que se importo: `b7e705de737e5b1039719807bb413ec89279e7d1`.
+Parado en `iw3-backend` (donde ese hash y `upstream/main` si comparten
+ancestria real), el comando correcto es:
+
+```bash
+git fetch upstream
+git log b7e705de737e5b1039719807bb413ec89279e7d1..upstream/main
+```
+
+Procedimiento acordado para cada commit nuevo que aparezca ahi:
+
+1. Revisar el diff de ese commit (`git show <commit>`) desde
+   `iw3-backend`, buscando credenciales o configuracion insegura con el
+   mismo criterio usado en esta revision (grep de `password`, `secret`,
+   `smtp`, defaults embebidos, etc.), sin importar si a primera vista
+   parece "no sensible".
+2. Llevar el cambio a `iw3-backend-sanitized` sin un commit automatico:
+   generar el diff/patch desde `iw3-backend` (por ejemplo `git show
+   <commit> > /tmp/cambio.patch`) y aplicarlo con `git apply` sobre el
+   arbol de trabajo de `iw3-backend-sanitized`, o reproducir el cambio a
+   mano si el patch no aplica limpio por las diferencias ya existentes.
+3. Mientras el cambio esta en el arbol de trabajo y todavia sin
+   commitear, sanear lo que haga falta (por ejemplo, volver a aplicar el
+   patron de variables de entorno si el commit del profesor reintrodujo
+   un valor por defecto).
+4. Recien ahi crear el commit propio en `iw3-backend-sanitized`, con un
+   mensaje que documente de que commit original viene el cambio y que
+   correccion se le aplico.
+5. Actualizar en este documento cual es el "ultimo commit original
+   importado" despues de cada ronda, para que la referencia de la
+   comparacion siga siendo correcta.
+6. Nunca hacer `push --force` sobre una rama ya publicada para "arreglar"
    un secreto que se coló: hay que evitarlo antes del commit, no despues
    del push.
+
+## F0 — hallazgos que corrigen o confirman supuestos previos
+
+- **Lectura completa de T1/T2 (NotebookLM, cuaderno "Ingenieria Web III
+  BE"):** ver el detalle, con texto literal/interpretacion/duda
+  separados, en `docs/fuentes.md`. Esa lectura resuelve a CONFIRMADO lo
+  que antes era SUPUESTO A VALIDAR sobre el momento de generacion de la
+  clave de activacion (transicion 1->2, junto con la tara). Sobre
+  densidad, la lectura aporta la cita literal pero **no** resuelve la
+  inconsistencia entre el rango (0-1) y la unidad (kg/m3); eso sigue como
+  DUDA PENDIENTE, no como CONFIRMADO — no se debe asumir que "anecdotico"
+  implica "sin validacion de rango" (ver `docs/fuentes.md`).
+- **Perfiles Maven vs. perfiles Spring (verificado con `help:active-profiles`
+  y `help:evaluate`, no solo leido del POM):** los 4 perfiles de
+  ejecucion (`mysqldev`, `mysqlprod`, `cli1`, `cli2`) solo fijan la
+  propiedad `spring.profiles.active`, que el plugin de Spring Boot usa
+  para seleccionar el perfil de la aplicacion en tiempo de ejecucion; no
+  tienen relacion directa con el empaquetado. El perfil `war-build` tiene
+  `activeByDefault=true` y se activa tambien con `-Dbuild=war`, pero esa
+  activacion por defecto se cancela en cuanto se activa *cualquier otro*
+  perfil del mismo POM por `-P` — incluidos los 4 de ejecucion, que no
+  tienen nada que ver con el empaquetado. Confirmado de forma empirica:
+  `./mvnw help:active-profiles -Pmysqldev` (sin `-Dbuild`) falla con
+  `Unknown packaging: ${packaging.type}`, y lo mismo le pasa a
+  `./mvnw spring-boot:run -Pmysqldev` sin `-Dbuild`, porque Maven resuelve
+  el `<packaging>` del proyecto antes de ejecutar cualquier goal. Con
+  `-Dbuild=war -Pmysqldev` quedan activos ambos perfiles
+  (`help:active-profiles` los lista a los dos) y `packaging.type`
+  resuelve a `war` (`help:evaluate`). Regla practica para F1: siempre
+  combinar un perfil de ejecucion con `-Dbuild=war` o `-Dbuild=jar`
+  explicito.
+- **Herramientas verificadas en F0 (no solo mencionadas):** Postman CLI
+  real (`1.75.0`, `~/.npm-global/bin/postman`), NotebookLM MCP conectado y
+  usado, skill `graphify` disponible pero no ejecutada todavia (no existe
+  `graphify-out/`), Chrome DevTools MCP configurado pero con conexion
+  fallida (`CONNECTION_CLOSED`), no se intento usar.
+- **Precision sobre que se compilo:** la compilacion y la prueba unitaria
+  de JWT verificadas hasta ahora corresponden a la copia ya saneada y con
+  la externalizacion de credenciales aplicada. No se compilo por separado
+  el commit original del profesor sin modificar.
+- **Precision sobre la prueba de JWT:** lo que se ejecuto y paso fue una
+  prueba unitaria aislada (firma/verificacion con claves temporales, y
+  `validateJwtSecret()` invocado por reflexion con valores nulo/vacio/en
+  blanco). Eso es distinto de un arranque real de la aplicacion Spring
+  con la variable de entorno `JWT_SECRET` realmente ausente del proceso:
+  esa prueba de arranque real **no se ejecuto**. La afirmacion de que
+  Spring falla al no poder resolver el placeholder si falta la variable
+  es un razonamiento sobre el comportamiento documentado de Spring, no
+  una prueba ejecutada y observada en esta sesion.
