@@ -28,8 +28,11 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class JWTAuthorizationFilter extends BasicAuthenticationFilter {
-	public JWTAuthorizationFilter(AuthenticationManager authenticationManager) {
+	private final String jwtSecret;
+
+	public JWTAuthorizationFilter(AuthenticationManager authenticationManager, String jwtSecret) {
 		super(authenticationManager);
+		this.jwtSecret = jwtSecret;
 	}
 
 	@Override
@@ -64,7 +67,7 @@ public class JWTAuthorizationFilter extends BasicAuthenticationFilter {
 			// Parseamos el token usando la librería
 			DecodedJWT jwt = null;
 			try {
-				jwt = JWT.require(Algorithm.HMAC512(AuthConstants.SECRET.getBytes())).build().verify(token);
+				jwt = JWT.require(Algorithm.HMAC512(jwtSecret.getBytes())).build().verify(token);
 				log.trace("Token recibido por '{}'", byHeader ? "header" : "query param");
 				log.trace("Usuario logueado: " + jwt.getSubject());
 				log.trace("Roles: " + jwt.getClaim("roles"));

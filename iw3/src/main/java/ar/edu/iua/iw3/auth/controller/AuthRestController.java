@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Date;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -41,6 +42,9 @@ public class AuthRestController extends BaseRestController {
 	@Autowired
 	private ApplicationEventPublisher applicationEventPublisher;
 
+	@Value("${jwt.secret}")
+	private String jwtSecret;
+
 
 	
 	@PostMapping(value = Constants.URL_LOGIN, produces = MediaType.TEXT_PLAIN_VALUE)
@@ -63,7 +67,7 @@ public class AuthRestController extends BaseRestController {
 				.withClaim("email", user.getEmail())
 				.withClaim("version", "1.0.0")
 				.withExpiresAt(new Date(System.currentTimeMillis() + AuthConstants.EXPIRATION_TIME))
-				.sign(Algorithm.HMAC512(AuthConstants.SECRET.getBytes()));
+				.sign(Algorithm.HMAC512(jwtSecret.getBytes()));
 
 		applicationEventPublisher.publishEvent(new UserEvent(user, request, UserEvent.TypeEvent.LOGIN));
 

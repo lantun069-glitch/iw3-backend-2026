@@ -1,6 +1,7 @@
 package ar.edu.iua.iw3.security;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -21,6 +22,8 @@ import ar.edu.iua.iw3.auth.IUserBusiness;
 import ar.edu.iua.iw3.auth.custom.CustomAuthenticationManager;
 import ar.edu.iua.iw3.auth.filters.JWTAuthorizationFilter;
 import ar.edu.iua.iw3.controllers.Constants;
+
+import jakarta.annotation.PostConstruct;
 
 @Configuration
 @EnableWebSecurity
@@ -43,6 +46,17 @@ public class SecurityConfiguration {
 
 	@Autowired
 	private IUserBusiness userBusiness;
+
+	@Value("${jwt.secret}")
+	private String jwtSecret;
+
+	@PostConstruct
+	void validateJwtSecret() {
+		if (jwtSecret == null || jwtSecret.isBlank()) {
+			throw new IllegalStateException(
+					"jwt.secret (variable de entorno JWT_SECRET) no esta definido o esta vacio; no se puede iniciar la aplicacion sin una clave de firma valida.");
+		}
+	}
 
 	@Bean
 	AuthenticationManager authenticationManager() {
@@ -69,7 +83,7 @@ public class SecurityConfiguration {
 				.requestMatchers("/demo/**").permitAll().anyRequest().authenticated());
 		http.httpBasic(Customizer.withDefaults())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
-		http.addFilter(new JWTAuthorizationFilter(authenticationManager()));
+		http.addFilter(new JWTAuthorizationFilter(authenticationManager(), jwtSecret));
 		return http.build();
 
 	}
