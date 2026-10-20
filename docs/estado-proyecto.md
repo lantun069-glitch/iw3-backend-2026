@@ -1,11 +1,12 @@
 # Estado del proyecto
 
-Último checkpoint: [`2026-10-20-04.md`](checkpoints/2026-10-20-04.md).
-Fase activa: **F1 — revisión final y respaldo pendientes**. F0 está cerrada.
-MySQL local, arranque con `mysqldev` y autenticación HTTP ya fueron probados
-según los resultados registrados por el equipo. La guía de reproducción está
-preparada en [`desarrollo-local.md`](desarrollo-local.md). Falta aprobar esta
-revisión y publicar los cambios de F1; no se declara todavía el cierre formal.
+Último checkpoint: [`2026-10-20-05.md`](checkpoints/2026-10-20-05.md).
+Fase activa: **F2 — pendiente de iniciar**. **F0 y F1 están cerradas.**
+El bloque de F1 (infraestructura local, arranque con `mysqldev`,
+autenticación HTTP) quedó publicado y respaldado en el commit `cf64c61`
+de `feature/setup-inicial`, árbol de trabajo limpio al momento del cierre.
+La guía de reproducción sigue en [`desarrollo-local.md`](desarrollo-local.md).
+No se inició ningún trabajo de F2 todavía.
 
 ## Repositorios
 
@@ -266,3 +267,27 @@ como registro histórico. Permanecen las dudas de fecha de entrega 2026,
 densidad, contrato de activación, metadatos de aceptación de alarma y
 stack/CI/hosting FE. En esta revisión no se consultaron nuevas fuentes de
 cátedra ni se resolvieron esas dudas.
+
+## Cierre de F1
+
+**Evidencia de cierre:** commit `cf64c619621fb64131162cd97b10e0e13733a26a`
+("chore: preparar entorno local y documentar verificaciones de F1"),
+publicado en `origin/feature/setup-inicial`; `git status -sb` muestra la
+rama sincronizada con el remoto y el árbol de trabajo limpio al momento
+de este cierre. No se repitió ninguna prueba ni auditoría para esta
+entrada: el cierre se basa en el estado Git ya verificado y en el trabajo
+ya registrado en el checkpoint 04.
+
+**F1 queda formalmente cerrada.** Se conservan, sin resolver ni dar por
+superados, todos los pendientes y límites ya registrados en el checkpoint
+04: arranque real sin `JWT_SECRET` no probado; `main`/`develop` sin probar
+ni publicar; correo real, proveedor SMTP institucional y remitente
+autorizado pendientes; autorización por roles funcionales (más allá del
+rol de prueba insertado a mano) no implementada; requisitos de dominio
+TP01–TP35 siguen en **pendiente**, TP36 en **en curso** sin práctica real;
+fecha de entrega 2026, inconsistencia de densidad, contrato de activación,
+metadatos de aceptación de alarma y stack/CI/hosting FE siguen abiertos;
+Graphify permanece local, ignorado y sin regenerar.
+
+**F2 queda pendiente de iniciar.** No se tocó código, no se ejecutaron
+pruebas ni auditorías nuevas, y no se regeneró Graphify para este cierre.
