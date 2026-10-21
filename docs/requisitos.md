@@ -13,14 +13,20 @@ TP07 están **verificados** para la unidad de recepción de orden (F2);
 TP08 y TP09 están **verificados** para la primera unidad de F3 (tara y
 activación), revisada, aprobada y publicada en la rama
 `feature/f3-tara-activacion` (la fase F3 sigue abierta, sin cierre);
-TP20 y TP21 están **en curso**
-(cubren la transición de creación y la de tara, no el resto del ciclo de
-vida); TP23 y TP24 (OpenAPI y Postman) están **en curso**, verificados
-para recepción+tara+activación y pendientes de ampliar con telemetría y
-los endpoints de F4; el resto de los requisitos funcionales (TP01,
-TP10–TP19, TP22, TP25 en adelante) sigue **pendiente**, porque las fases
-que les corresponden (segunda unidad de F3 en adelante, o el cierre del
-segundo parcial para TP22) todavía no empezaron. TP36, de preparación
+TP10 a TP13 están **verificados** (TP13 puntualmente para las órdenes
+920001/920003/920005, por consulta directa de BD ejecutada por el
+usuario, no generalizado a escenarios no probados) para la segunda
+unidad de F3 (telemetría), aprobada y publicada en la misma rama; TP14
+sigue **pendiente**,
+confirmado explícitamente no adelantado en esta unidad; TP20 y TP21
+están **en curso** (cubren la transición de creación y la de tara, no
+el resto del ciclo de vida); TP23 y TP24 (OpenAPI y Postman) están **en
+curso**, verificados para recepción+tara+activación+lecturas y
+pendientes de ampliar con los endpoints de F4; el resto de los
+requisitos funcionales (TP01, TP15–TP19, TP22, TP25 en adelante) sigue
+**pendiente**, porque las fases que les corresponden (F4 en adelante, o
+el cierre del segundo parcial para TP22) todavía no empezaron. TP36, de
+preparación
 para la defensa, está en curso; todavía no se practicaron las preguntas.
 De las filas de equipo/infraestructura (EQ), EQ01 y EQ02 están en curso
 y EQ03 está verificado.
@@ -266,7 +272,24 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F3.
 - Criterio de aceptación: lectura aceptada en estado 2; rechazada en
   estados 1, 3 y 4.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado** (segunda unidad de F3, rama
+  `feature/f3-tara-activacion`, implementada en esta sesión, sin
+  commit/push/checkpoint todavía — a la espera de aprobación explícita
+  para publicar, mismo protocolo que la primera unidad). Implementación:
+  `POST /api/v1/orders/{orderNumber}/lecturas` —
+  `OrdenRestController`/`OrdenBusiness.registrarLectura`. Precondición
+  ampliada (DECISIÓN DEL EQUIPO, no cita literal): además de estado 2,
+  requiere `fechaActivacion != null` — ver
+  `docs/contrato-f3-telemetria.md`. Estados 3/4 todavía no son
+  alcanzables por ningún endpoint implementado, así que ese caso
+  puntual del criterio no se pudo ejercitar; sí se verificó el rechazo
+  en estado 1 (orden con tara pero sin activar) y el rechazo explícito
+  cuando falta activación. Evidencia: HTTP real contra la app
+  corriendo — lectura antes de activar (409), orden inexistente (404),
+  campo ausente (400), sin token (401). Colección Postman
+  `postman/iw3-f3-telemetria.postman_collection.json`: última ejecución
+  con `--iteration-count 2`, 34 requests, 38 aserciones, 0 fallos (17/19
+  por corrida).
 
 ### TP11 — Descarte de lecturas inválidas
 - Descripción: se descartan lecturas con caudal ≤ 0, masa acumulada ≤ 0,
@@ -281,7 +304,21 @@ y descarte de lecturas: `docs/fuentes.md`.
   "menor o igual", para ese caso puntual). Si la masa es positiva e igual a la última válida y el caudal es
   positivo, la igualdad no introduce una regla adicional de descarte.
   El almacenamiento del detalle sigue la frecuencia aplicable.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado** (segunda unidad de F3). Implementación:
+  `OrdenBusiness.registrarLectura`, prioridad explícita de motivos
+  cuando varios aplican a la vez (DECISIÓN DEL EQUIPO, orden
+  `caudal_no_positivo` > `masa_no_positiva` > `masa_decreciente`, no
+  derivada de la fuente): ver `docs/contrato-f3-telemetria.md`. Sin
+  antecedente (primera lectura de la orden) la regla de masa decreciente
+  no se evalúa (DATO FALTANTE en la fuente para ese caso, resuelto por
+  decisión del equipo). Evidencia: los tres motivos probados por
+  separado; masa igual a la anterior aceptada; prioridad verificada con
+  caudal y masa no positivos simultáneos (gana `caudal_no_positivo`);
+  carrera de dos lecturas concurrentes con masas distintas, procesadas
+  bajo el mismo bloqueo que tara/activación (`PESSIMISTIC_WRITE`) —
+  resultado compatible con el diseño, no una prueba de contención
+  efectiva del lock (mismo criterio que las carreras de la unidad
+  anterior).
 
 ### TP12 — Snapshot de últimos valores válidos
 - Descripción: el sistema mantiene siempre el último valor válido de
@@ -295,7 +332,17 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F3 / F6.
 - Criterio de aceptación: una lectura válida actualiza el snapshot aunque
   no genere un registro de detalle (por la frecuencia configurada).
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado** (segunda unidad de F3). Implementación: campos
+  directos en `Orden` (`masaAcumuladaKg`, `densidad`, `temperaturaC`,
+  `caudalKgH`, `fechaUltimaLectura`), `null` hasta la primera lectura
+  aceptada — verificado explícitamente que no se inicializan en cero.
+  Para esta unidad cada lectura aceptada también genera detalle (TP14
+  opcional no adelantada), así que el caso "actualiza snapshot sin
+  generar detalle" no se pudo ejercitar todavía — eso depende de la
+  frecuencia configurable, fuera de esta unidad. Evidencia: descartes
+  antes del primer snapshot devuelven `null`; lecturas aceptadas
+  sucesivas actualizan los cuatro valores y `fechaUltimaLectura`; una
+  lectura descartada no modifica ninguno de los dos.
 
 ### TP13 — Detalle histórico ligado a la orden
 - Descripción: cada registro de detalle (masa, densidad, temperatura,
@@ -306,7 +353,21 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F3.
 - Criterio de aceptación: el histórico de dos órdenes distintas no se
   mezcla.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado**, puntualmente para las órdenes
+  920001/920003/920005 — no generalizado a escenarios no probados.
+  Implementación: `model/DetalleCarga.java` (nueva entidad: `orden`,
+  los 4 valores, `fechaLectura`), una fila por lectura aceptada.
+  Evidencia: consulta SQL (preparada en
+  `docs/contrato-f3-telemetria.md`, columnas corregidas
+  `temperaturac`/`caudal_kgh`) ejecutada directamente contra la base
+  por el usuario (esta sesión no tuvo acceso a `docker exec`/cliente
+  `mysql`). Resultado: 3/2/2 filas de detalle para 920001/920003/920005
+  respectivamente, coincidente con la cantidad de lecturas aceptadas de
+  cada una (ninguna descartada agregó fila); masas almacenadas
+  coincidentes con las esperadas; `fechaInicioCarga`/`fechaUltimaLectura`
+  del snapshot coincidentes con la `fecha_lectura` de la primera y la
+  última fila de detalle de cada orden; ningún detalle de una orden
+  apareció bajo otra.
 
 ### TP14 — Frecuencia de almacenamiento configurable
 - Descripción: la frecuencia de persistencia del detalle puede
@@ -322,7 +383,12 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: con un intervalo configurado, una serie de
   lecturas de prueba produce la cantidad esperada de registros, sin
   afectar la frecuencia de recepción ni el refresco de pantalla.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: pendiente. **Confirmado explícitamente no adelantado en la
+  segunda unidad de F3** (TP10-TP13): esa unidad guarda cada lectura
+  aceptada en `DetalleCarga`, sin frecuencia configurable ni
+  deduplicación, por decisión explícita de mantener esto fuera de
+  alcance (ver `docs/contrato-f3-telemetria.md`). Implementación: —.
+  Evidencia: —.
 
 ### TP15 — Cierre explícito 2→3
 - Descripción: un endpoint explícito cierra la orden, bloqueando nuevas
@@ -470,33 +536,38 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F5.
 - Criterio de aceptación: operaciones, esquemas, unidades y errores
   documentados coinciden con el comportamiento real de la API.
-- Estado: en curso (verificado para los tres endpoints de dominio que
-  existen hasta ahora — recepción de orden, tara y activación —; falta
-  documentar los que se agreguen en la segunda unidad de F3 en
-  adelante). Implementación: `ordenes/controllers/OrdenRestController.java`
+- Estado: en curso (verificado para los cuatro endpoints de dominio que
+  existen hasta ahora — recepción de orden, tara, activación y
+  lecturas —; falta documentar los que se agreguen en F4 en adelante).
+  Implementación: `ordenes/controllers/OrdenRestController.java`
   (`@Operation`, `@ApiResponses` con ejemplos): recepción con
   201/400/409/500, tara con 200/400/404/409/500, activación con
-  200/400 (clave incorrecta y clave fuera de rango)/404/409/500;
+  200/400 (clave incorrecta y clave fuera de rango)/404/409/500,
+  lecturas con 200 (aceptada y descartada)/400/404/409 (dos variantes:
+  estado incompatible y sin activar)/500;
   `@io.swagger.v3.oas.annotations.parameters.RequestBody` con ejemplo de
-  entrada en los tres casos. Evidencia: `GET /v3/api-docs` verificado
+  entrada en los cuatro casos. Evidencia: `GET /v3/api-docs` verificado
   contra la app corriendo — `paths./api/v1/orders.post` con summary,
   description, ejemplo de request y las cinco respuestas de recepción
   (201 con ejemplo; 400 con dos ejemplos — campo obligatorio ausente y
   JSON malformado —; 401 sin cuerpo; 409 y 500 con ejemplo), todas con
   el esquema real (`StandartResponse`/`OrdenRecepcionResponse`); los
-  paths nuevos `paths./api/v1/orders/{orderNumber}/tara.post` y
-  `paths./api/v1/orders/{orderNumber}/activacion.post` presentes con sus
-  respuestas documentadas (`TaraResponse`/`ActivacionResponse` para el
-  éxito). La obligatoriedad y los límites de longitud/rango de los
-  campos de los DTO (`OrdenRecepcionRequest` y sus 4 DTO anidados,
-  `TaraRequest`, `ActivacionRequest`) ya aparecían correctamente en
+  paths `paths./api/v1/orders/{orderNumber}/tara.post`,
+  `paths./api/v1/orders/{orderNumber}/activacion.post` y
+  `paths./api/v1/orders/{orderNumber}/lecturas.post` presentes con sus
+  respuestas documentadas (`TaraResponse`/`ActivacionResponse`/
+  `LecturaResponse` para el éxito). La obligatoriedad y los límites de
+  longitud/rango/precisión de los campos de los DTO
+  (`OrdenRecepcionRequest` y sus 4 DTO anidados, `TaraRequest`,
+  `ActivacionRequest`, `LecturaRequest`) ya aparecían correctamente en
   `components.schemas` sin anotación adicional, porque springdoc deriva
-  `required`/`maxLength`/`minimum`/`maximum` directamente de
-  `@NotNull`/`@NotBlank`/`@Size`/`@Min`/`@Max` — se verificó esto contra
-  el JSON real antes de agregar cualquier anotación extra, para no
-  duplicar algo que ya funcionaba. `config/OpenApiConfig.java` (base
-  docente) provee el esquema de seguridad Bearer JWT a nivel global, ya
-  aplicado (`security` en la raíz del documento, verificado).
+  `required`/`maxLength`/`minimum`/`maximum`/`multipleOf` directamente
+  de `@NotNull`/`@NotBlank`/`@Size`/`@Min`/`@Max`/`@Digits` — se
+  verificó esto contra el JSON real antes de agregar cualquier
+  anotación extra, para no duplicar algo que ya funcionaba.
+  `config/OpenApiConfig.java` (base docente) provee el esquema de
+  seguridad Bearer JWT a nivel global, ya aplicado (`security` en la
+  raíz del documento, verificado).
 
 ### TP24 — Colección Postman
 - Descripción: colección Postman que prueba y valida las APIs
@@ -508,12 +579,12 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: la colección se importa sin errores, usa
   variables documentadas (no credenciales fijas) y cada request es
   ejecutable contra el entorno local.
-- Estado: en curso (verificado para recepción de orden, tara y
-  activación; falta ampliar con telemetría y los endpoints de F4 en
+- Estado: en curso (verificado para recepción de orden, tara,
+  activación y lecturas; falta ampliar con los endpoints de F4 en
   adelante, según el criterio de "ampliar en el final"). Implementación:
   `postman/iw3-f2-recepcion.postman_collection.json` (6 requests: login,
   recepción válida, segunda orden reutilizando referencias existentes,
-  duplicado de `orderNumber`, entrada inválida y solicitud sin token) y
+  duplicado de `orderNumber`, entrada inválida y solicitud sin token),
   `postman/iw3-f3-tara-activacion.postman_collection.json` (17 requests:
   login, dos órdenes de apoyo, activación antes de tara, tara sobre
   orden inexistente, tara válida, tara repetida, clave incorrecta, clave
@@ -522,33 +593,43 @@ y descarte de lecturas: `docs/fuentes.md`.
   además de `fechaActivacion`—, reintento idempotente —mismas
   aserciones—, clave incorrecta después de activar, ambos endpoints sin
   token, y una tara final sobre la orden de apoyo que confirma que
-  seguía en estado 1 tras los rechazos), ambas con
-  `postman/iw3-local.postman_environment.example.json` (variables sin
-  valores reales). Variables de colección para URL/credenciales
-  (`baseUrl`, `testUsername`, `testPassword`, sin valores por defecto
-  sensibles) y datos de prueba generados en tiempo de ejecución para no
-  chocar con ejecuciones anteriores: F2 usa un sufijo de timestamp en
-  segundos; F3 regenera sus `orderNumber`/`extSuffix` y limpia
-  `jwtToken`/clave temporal al inicio de cada corrida completa (en el
-  pre-request del primer request, sin depender de ningún flag
-  persistente), con un valor en milisegundos acotado para no exceder el
-  rango de `Integer` — necesario porque dos corridas completas lanzadas
-  una detrás de otra en el mismo proceso pueden caer en el mismo
-  segundo. Evidencia: ejecución real con `postman collection run` (sin
-  `postman login`, sin `--output`, para no requerir ni dejar rastro de
-  una cuenta externa) pasando credenciales solo por `--env-var` (nunca
-  escritas en un archivo versionado). F2: 6/6 requests, 12/12
-  aserciones, 0 fallos. F3: 17/17 requests, 20/20 aserciones, 0 fallos
-  por corrida; verificado además con `--iteration-count 2` (dos corridas
-  completas en el mismo proceso, conservando variables de colección
-  entre ellas): 34/34 requests, 40/40 aserciones, 0 fallos, con
-  `orderNumber` distintos entre ambas corridas (confirma que la
-  reinicialización no depende de un flag persistente ni reutiliza datos
-  de una corrida anterior). Las aserciones verifican únicamente lo que
-  la respuesta HTTP expone (status y cuerpo JSON); no afirman cambios
-  internos de base de datos que la API no permite observar, ni
-  contención efectiva de un lock a partir de lanzar procesos en paralelo
-  — ver `docs/decisiones.md`, secciones F2 y F3.
+  seguía en estado 1 tras los rechazos) y
+  `postman/iw3-f3-telemetria.postman_collection.json` (17 requests:
+  login, dos órdenes de apoyo (una activada, otra con tara sin activar),
+  lectura antes de activar, dos descartes antes del primer snapshot con
+  aserciones de campos `null`, primera lectura aceptada con aserción de
+  `fechaInicioCarga`, segunda aceptada que la conserva, masa igual
+  aceptada, masa decreciente descartada con snapshot sin cambios,
+  prioridad de motivos, orden inexistente, campo ausente y sin token),
+  las tres con `postman/iw3-local.postman_environment.example.json`
+  (variables sin valores reales). Variables de colección para
+  URL/credenciales (`baseUrl`, `testUsername`, `testPassword`, sin
+  valores por defecto sensibles) y datos de prueba generados en tiempo
+  de ejecución para no chocar con ejecuciones anteriores: F2 usa un
+  sufijo de timestamp en segundos; ambas colecciones de F3 regeneran sus
+  `orderNumber`/`extSuffix` y limpian `jwtToken`/claves temporales al
+  inicio de cada corrida completa (en el pre-request del primer
+  request, sin depender de ningún flag persistente), con un valor en
+  milisegundos acotado para no exceder el rango de `Integer` —
+  necesario porque dos corridas completas lanzadas una detrás de otra en
+  el mismo proceso pueden caer en el mismo segundo. Evidencia: ejecución
+  real con `postman collection run` (sin `postman login`, sin
+  `--output`, para no requerir ni dejar rastro de una cuenta externa)
+  pasando credenciales solo por `--env-var` (nunca escritas en un
+  archivo versionado). F2: 6/6 requests, 12/12 aserciones, 0 fallos. F3
+  (tara/activación): 17/17 requests, 20/20 aserciones, 0 fallos por
+  corrida; verificado además con `--iteration-count 2`: 34/34 requests,
+  40/40 aserciones, 0 fallos. F3 (telemetría): 17/17 requests, 19/19
+  aserciones, 0 fallos por corrida; verificado con `--iteration-count
+  2`: 34/34 requests, 38/38 aserciones, 0 fallos. En ambas colecciones
+  de F3, `orderNumber` distintos entre las dos corridas de cada
+  `--iteration-count 2` (confirma que la reinicialización no depende de
+  un flag persistente ni reutiliza datos de una corrida anterior). Las
+  aserciones verifican únicamente lo que la respuesta HTTP expone
+  (status y cuerpo JSON); no afirman cambios internos de base de datos
+  que la API no permite observar, ni contención efectiva de un lock a
+  partir de lanzar procesos en paralelo — ver `docs/decisiones.md`,
+  secciones F2 y F3.
 
 ### TP25 — Simulación automatizada del circuito
 - Descripción: runner/tests de Postman que simulan el circuito completo

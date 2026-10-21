@@ -18,14 +18,24 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * F2 cubrio la recepcion (creacion en estado 1). F3 (esta unidad) agrega
- * tara/clave de activacion (transicion 1->2) y fecha de activacion. Los
- * campos de telemetria/snapshot/histórico de F3 (segunda unidad en
- * adelante) y los de F4 (pesaje final) todavia no se agregan.
+ * F2 cubrio la recepcion (creacion en estado 1). F3 agrega tara/clave de
+ * activacion (primera unidad) y snapshot de telemetria (segunda unidad,
+ * esta). Los campos de F4 (pesaje final) todavia no se agregan.
  *
  * uk_orden_order_number tiene un nombre explicito (no autogenerado) para
  * poder distinguir, en OrdenBusiness, esta restriccion de integridad de
  * cualquier otra ante una colision concurrente de orderNumber.
+ *
+ * Precision de los campos de telemetria (DECISION DEL EQUIPO, ver
+ * docs/decisiones.md seccion F3 - segunda unidad): masaAcumuladaKg y
+ * caudalKgH reutilizan DECIMAL(15,3), igual que taraKg/presetKg.
+ * densidad usa DECIMAL(10,4): precision deliberadamente generosa porque
+ * la fuente es ambigua entre "valor entre 0 y 1" y "kg/m3" (DUDA
+ * PENDIENTE sin resolver, ver docs/fuentes.md) - esta escala no toma
+ * partido en esa duda, solo evita que un valor realista de cualquiera
+ * de las dos lecturas posibles se trunque en silencio. temperaturaC usa
+ * DECIMAL(6,2), generosa para admitir valores negativos sin restringir
+ * un rango fisico no pedido por la fuente.
  */
 @Entity
 @Table(name = "ordenes", uniqueConstraints = @UniqueConstraint(name = "uk_orden_order_number", columnNames = "order_number"))
@@ -101,4 +111,38 @@ public class Orden {
 	 */
 	@Column
 	private LocalDateTime fechaActivacion;
+
+	/**
+	 * Snapshot de telemetria: ultimo valor VALIDO recibido de cada
+	 * atributo (ver OrdenBusiness.registrarLectura para las reglas de
+	 * descarte). Null hasta que exista al menos una lectura aceptada; no
+	 * se inicializan en cero. Una lectura descartada no modifica ninguno
+	 * de estos campos ni fechaUltimaLectura.
+	 */
+	@Column(precision = 15, scale = 3)
+	private BigDecimal masaAcumuladaKg;
+
+	@Column(precision = 10, scale = 4)
+	private BigDecimal densidad;
+
+	@Column(precision = 6, scale = 2)
+	private BigDecimal temperaturaC;
+
+	@Column(precision = 15, scale = 3)
+	private BigDecimal caudalKgH;
+
+	@Column
+	private LocalDateTime fechaUltimaLectura;
+
+	/**
+	 * Instante de procesamiento de la primera lectura aceptada para esta
+	 * orden (generado por el servidor, no por el instrumento). Es una
+	 * INTERPRETACION DEL EQUIPO apoyada en T1 ("la fecha y hora de el
+	 * inicio... el momento que empece a recibir la carga"), no una
+	 * definicion literal inequivoca de "primera lectura valida" - ver
+	 * docs/decisiones.md. Se fija una sola vez; lecturas aceptadas
+	 * posteriores no lo modifican. No se equipara a fechaActivacion.
+	 */
+	@Column
+	private LocalDateTime fechaInicioCarga;
 }

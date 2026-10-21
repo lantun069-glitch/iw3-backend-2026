@@ -536,3 +536,141 @@ efectivamente implementado y verificado.
   prueba manual (no en ningún archivo de reporte, documento versionado
   ni mensaje al usuario). Se corrigió el enmascarado (patrón `jq` que
   oculta el campo) para el resto de las pruebas de la sesión.
+
+## F3 — segunda unidad: telemetría, descarte, snapshot e histórico (TP10–TP13)
+
+Detalle completo del contrato en `docs/contrato-f3-telemetria.md`. Aquí
+las decisiones y su origen. Contrato validado por el usuario antes de
+implementar.
+
+- **Precondición de activación, además de estado 2 (DECISIÓN DEL
+  EQUIPO, no cita literal):** T1 no exige textualmente que una orden
+  deba estar activada para aceptar telemetría — el criterio original de
+  TP10 solo pedía "estado 2". Se agregó `fechaActivacion != null` como
+  precondición explícita (`409` distinto si falta) porque es coherente
+  con el circuito de habilitación que T1 sí describe (sin activación no
+  hay instrumento habilitado, luego no debería haber telemetría real
+  que procesar) — pero esto es una interpretación de coherencia del
+  equipo, no un requisito confirmado por el texto.
+- **`fechaInicioCarga` = instante de procesamiento de la primera lectura
+  aceptada (INTERPRETACIÓN DEL EQUIPO, no definición literal
+  inequívoca):** la cita de T1 (fuente
+  `59f2c5bf-3d78-4e71-a60a-153dbecb9c27`, carácter ~16938-17499,
+  literal exacto, re-leído con `source_read` para evitar el parafraseo
+  del chat) dice: *"...la fecha y hora de el inicio en el último
+  momento que empecé a recibir la carga, la fecha y hora de fin de
+  carga, ya cuando recibí el último registro..."* El ruido de ASR en
+  "el último momento que empecé" no permite citarla como una definición
+  inequívoca de "primera lectura válida" — pero la simetría con "fin de
+  carga = cuando recibí el **último** registro" sostiene razonablemente
+  que "inicio" se refiere al **primer** registro recibido, no a la
+  activación ni a la tara. Es la lectura que se adopta, documentada como
+  interpretación, no como cita literal cerrada.
+- **Generado por el servidor al procesar, no por el instrumento:** sin
+  campo de timestamp en el payload de entrada (ver DTO), consistente con
+  el resto de la API (F2/F3 primera unidad).
+- **Una sola fecha para snapshot, detalle y (si aplica) inicio de
+  carga:** en `OrdenBusiness.registrarLectura` se genera una única
+  `LocalDateTime.now(ZONA_RECEPCION).truncatedTo(ChronoUnit.MICROS)`
+  por lectura aceptada, reutilizada para `fechaUltimaLectura`, la fila
+  de `DetalleCarga`, y `fechaInicioCarga` si corresponde fijarla. El
+  truncado a microsegundos es el mismo aprendizaje de la unidad
+  anterior (bug de precisión en `fechaActivacion`): sin él, la primera
+  lectura aceptada devolvería un valor en memoria (nanosegundos) distinto
+  del que una relectura posterior (microsegundos, truncado por la
+  columna) mostraría para el mismo instante.
+- **No se tocan fechas de otras unidades:** `fechaRecepcion`,
+  `fechaTara` y `fechaActivacion` no se leen ni se escriben desde
+  `registrarLectura`.
+- **Validación vs. descarte de negocio (DECISIÓN DEL EQUIPO):**
+  `LecturaRequest` no tiene `@Positive`/`@DecimalMin` en
+  `masaAcumuladaKg`/`caudalKgH`: caudal/masa ≤ 0 son, según la fuente,
+  un caso frecuente y esperado ("eso ocurre durante mucho tiempo... no
+  me interesa"), no un error de entrada. Tratarlos como `400` habría
+  sido una interpretación más estricta de lo que la fuente describe.
+  Verificado: ambos casos devuelven `200` con `aceptada:false`.
+- **Masa sin antecedente (DATO FALTANTE en la fuente, DECISIÓN DEL
+  EQUIPO):** la regla de masa decreciente no se evalúa en la primera
+  lectura de una orden (nada contra qué comparar). Verificado: dos
+  descartes distintos (`caudal_no_positivo`, `masa_no_positiva`) antes
+  de la primera lectura aceptada devuelven el snapshot en `null`, no en
+  cero.
+- **Prioridad explícita de motivos cuando varios aplican a la vez
+  (DECISIÓN DEL EQUIPO, orden pedido por el usuario, no derivado de la
+  fuente):** `caudal_no_positivo` > `masa_no_positiva` >
+  `masa_decreciente`, implementado como cadena `if`/`else if` en ese
+  orden exacto. Verificado con `caudalKgH=-1` y `masaAcumuladaKg=-5`
+  simultáneos sobre una orden con snapshot ya en 1500 → devolvió
+  `caudal_no_positivo` (no `masa_no_positiva` ni `masa_decreciente`,
+  que también aplicarían).
+- **Densidad: duda conservada, no corregida.** Mismo texto de
+  `docs/fuentes.md` (rango 0–1 vs. unidad kg/m³): hay una duda abierta
+  sobre si esa unidad y ese rango son coherentes entre sí, **sin que se
+  haya demostrado una incompatibilidad física** — es la ambigüedad de
+  la fuente, no una conclusión propia del equipo. Para esta unidad se
+  almacena el valor recibido sin conversión ni validación de rango —
+  decisión provisional, explícitamente no definitiva. La precisión de
+  columna elegida (`DECIMAL(10,4)`) es una decisión de almacenamiento,
+  no una toma de postura sobre cuál de las dos lecturas (0–1 o kg/m³)
+  es la correcta.
+- **Precisión/escala de los cuatro campos (DECISIÓN DEL EQUIPO):**
+  `masaAcumuladaKg`/`caudalKgH` reutilizan `DECIMAL(15,3)` (mismo patrón
+  que `taraKg`/`presetKg`); `densidad` usa `DECIMAL(10,4)` (generosa,
+  sin tomar partido en la duda); `temperaturaC` usa `DECIMAL(6,2)`
+  (generosa, admite negativos, sin rango físico impuesto). `@Digits`
+  coincide exactamente con cada escala, para rechazar con `400` en vez
+  de redondear en silencio un valor que no entra en esa precisión.
+- **Snapshot y DetalleCarga en la misma transacción, con el mismo
+  bloqueo que tara/activación:** `findByOrderNumberForUpdate`
+  (`PESSIMISTIC_WRITE`) dentro de
+  `@Transactional(rollbackFor = Exception.class)`. No se agregó ninguna
+  infraestructura nueva de concurrencia: se reutilizó la ya aprobada en
+  la unidad anterior.
+- **Orden de procesamiento bajo el lock, no orden de llegada de red
+  (aclaración explícita pedida por el usuario):** el mecanismo de
+  descarte por masa decreciente ordena el *procesamiento* de dos
+  lecturas concurrentes (cuál adquiere el lock primero), no garantiza
+  que ese orden coincida con el orden real en que el instrumento las
+  envió por red — no hay número de secuencia en el payload (DATO
+  FALTANTE, T1 no lo menciona). Verificado con dos `curl` en paralelo
+  sobre la misma orden, masas 500 y 800: la de masa 800 adquirió el
+  lock primero (aceptada, fija snapshot en 800); la de masa 500, al
+  procesarse después, encontró 800 como antecedente y se descartó por
+  `masa_decreciente`, devolviendo el snapshot sin cambios (800). Una
+  tercera lectura de confirmación (masa 800 otra vez) se aceptó,
+  confirmando que el snapshot final conservó la mayor masa. **No se
+  forzó ni se observó empíricamente en esta sesión el otro orden de
+  procesamiento posible** (masa menor primero, en cuyo caso ambas
+  lecturas podrían aceptarse) — el contrato documenta ambos casos como
+  posibles sin afirmar cuál ocurrirá.
+- **Repetidas: sin deduplicación (DECISIÓN DEL EQUIPO).** Coherente con
+  que la igualdad de masa no se descarta (TP11): una lectura idéntica
+  enviada dos veces se procesa las dos veces como lectura nueva.
+  Inventar una deduplicación no pedida habría sido una idempotencia
+  silenciosa no autorizada.
+- **Verificación funcional — HTTP real contra la app corriendo
+  (`mysqldev`, MySQL en Docker, levantado por el usuario):** lectura
+  antes de activar (409, mensaje distinto al de estado incompatible);
+  dos descartes antes del primer snapshot con campos `null` (no cero);
+  primera lectura aceptada fija `fechaInicioCarga`; segunda lectura
+  aceptada (masa mayor) la conserva igual; masa igual a la anterior se
+  acepta; masa decreciente se descarta sin tocar el snapshot (sigue en
+  1500); prioridad de motivos verificada; orden inexistente (404);
+  campo ausente (400); sin token (401); carrera de dos lecturas
+  concurrentes con masas distintas (ver punto anterior); dos órdenes
+  distintas (A y E) con snapshots independientes, no mezclados a nivel
+  de API.
+- **Histórico (TP13) — verificado por consulta directa de BD, ejecutada
+  por el usuario (no por HTTP):** esta sesión no tuvo acceso a `docker
+  exec`/cliente `mysql` (sin `sudo` interactivo), así que la consulta
+  SQL puntual preparada en `docs/contrato-f3-telemetria.md` (nombres de
+  columna corregidos ahí: `temperaturac`/`caudal_kgh`, no
+  `temperatura_c`/`caudal_kg_h`) quedó pendiente hasta que el usuario la
+  corrió directamente y adjuntó la salida. **Resultado, verificado
+  puntualmente para las órdenes 920001/920003/920005, sin generalizar a
+  escenarios no probados:** 3/2/2 filas de detalle respectivamente
+  (coincide con la cantidad de lecturas aceptadas de cada una, ninguna
+  descartada agregó fila), masas almacenadas coincidentes con las
+  esperadas, y `fechaInicioCarga`/`fechaUltimaLectura` del snapshot
+  coincidentes con la `fecha_lectura` de la primera y la última fila de
+  detalle de cada orden. Ningún detalle de una orden apareció bajo otra.

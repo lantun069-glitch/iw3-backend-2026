@@ -1,11 +1,11 @@
 # Estado del proyecto
 
-Último checkpoint: [`2026-10-21-02.md`](checkpoints/2026-10-21-02.md).
-Fase activa: **F3 — primera unidad (tara y activación) implementada,
-revisada y aprobada; la fase sigue abierta** (falta telemetría/
-descarte/snapshot/histórico, segunda unidad de F3). **F0, F1 y F2 están
-cerradas.** El bloque de F1 (infraestructura local, arranque con
-`mysqldev`, autenticación HTTP) quedó publicado y respaldado en el
+Último checkpoint: [`2026-10-21-03.md`](checkpoints/2026-10-21-03.md).
+Fase activa: **F3 — ambas unidades (tara/activación y telemetría)
+implementadas, revisadas y aprobadas; la fase sigue abierta** (faltan
+TP14 opcional, y TP15 en adelante, que corresponden a F4). **F0, F1 y
+F2 están cerradas.** El bloque de F1 (infraestructura local, arranque
+con `mysqldev`, autenticación HTTP) quedó publicado y respaldado en el
 commit `cf64c61` de `feature/setup-inicial`, árbol de trabajo limpio al
 momento del cierre. La guía de reproducción sigue en
 [`desarrollo-local.md`](desarrollo-local.md).
@@ -20,9 +20,13 @@ evidencia. **F3, primera unidad (tara y activación, TP08-TP09):
 implementada, revisada y aprobada, publicada en la rama
 `feature/f3-tara-activacion`** — ver sección "F3 — primera unidad" más
 abajo y el checkpoint 2026-10-21-02 para el hash y el estado del
-respaldo remoto. La segunda unidad de F3 (telemetría, descarte de
-lecturas, snapshot/histórico — TP10-TP13) sigue pendiente de iniciar;
-antes de implementarla corresponde presentar su contrato para revisión.
+respaldo remoto. **F3, segunda unidad (telemetría, TP10-TP13):
+implementada, revisada y aprobada, publicada en la misma rama** — ver
+sección "F3 — segunda unidad" más abajo y el checkpoint 2026-10-21-03.
+**F3 sigue abierta como fase:** no se declara cerrada; quedan
+pendientes dentro de su alcance TP14 (opcional, no adelantado) y
+TP15–TP19 (cierre de carga, pesaje final, conciliación — corresponden a
+F4, todavía no iniciada).
 
 ## Repositorios
 
@@ -617,8 +621,87 @@ de publicar se corrigió una referencia incorrecta en
 `docs/decisiones.md` (la frase sobre `fechaActivacion` atribuía a F2 un
 criterio que en realidad se aplicó primero a la tara dentro de esta
 misma unidad de F3, no en F2). Checkpoint de esta entrada:
-[`checkpoints/2026-10-21-02.md`](checkpoints/2026-10-21-02.md). **Próximo
-paso:** presentar el contrato de la segunda unidad de F3 (telemetría,
-descarte de lecturas, snapshot e histórico) para revisión, antes de
-implementar — no implementar nada de esa unidad sin esa validación
-previa.
+[`checkpoints/2026-10-21-02.md`](checkpoints/2026-10-21-02.md).
+
+## F3 — segunda unidad: telemetría (implementada, revisada y aprobada)
+
+**Alcance:** TP10–TP13 (recepción de lecturas en estado 2 con orden
+activada, descarte por negocio, snapshot, histórico). No incluye
+frecuencia configurable (TP14), cierre de carga, pesaje final, alarmas
+ni frontend — fuera de alcance por pedido explícito. Contrato aprobado
+por el usuario antes de implementar, con los ajustes que impuso (ver
+`docs/decisiones.md`, sección F3 — segunda unidad, para el detalle
+completo). Rama `feature/f3-tara-activacion`, continuada desde el HEAD
+`538d0cf`. **Aprobación:** el usuario aprobó esta unidad tras revisión
+de código y una consulta directa de BD que ejecutó él mismo (ver
+"Evidencia de histórico" abajo). Checkpoint de esta entrada:
+[`checkpoints/2026-10-21-03.md`](checkpoints/2026-10-21-03.md).
+
+**Resumen de decisiones:** precondición `estado==2` **y**
+`fechaActivacion != null` (409 distinto si falta activación, decisión
+de coherencia del equipo, no cita literal); `fechaInicioCarga` =
+instante de procesamiento de la primera lectura aceptada
+(interpretación del equipo apoyada en T1, no definición literal
+cerrada), fijada una sola vez, truncada a microsegundos, misma fecha
+para snapshot/detalle/inicio; descarte por negocio (no por
+`@Positive`) con prioridad explícita `caudal_no_positivo` >
+`masa_no_positiva` > `masa_decreciente`; sin antecedente no se evalúa
+masa decreciente; densidad sin validar/convertir (duda conservada);
+precisión `DECIMAL(15,3)` para masa/caudal, `DECIMAL(10,4)` densidad,
+`DECIMAL(6,2)` temperatura; snapshot siempre `null` (no cero) sin
+lectura aceptada previa; mismo bloqueo `PESSIMISTIC_WRITE` que
+tara/activación para snapshot+histórico en la misma transacción; sin
+deduplicación de repetidas; orden de procesamiento bajo el lock
+explícitamente distinto de orden de llegada por red.
+
+**Evidencia — HTTP real contra la app corriendo (`mysqldev`, MySQL
+local):** lectura antes de activar (409, mensaje distinto del de
+estado incompatible); dos descartes antes del primer snapshot con
+campos `null`; primera lectura aceptada fija `fechaInicioCarga`;
+segunda aceptada (masa mayor) la conserva; masa igual aceptada; masa
+decreciente descartada sin tocar snapshot; prioridad de motivos
+verificada (caudal y masa no positivos a la vez → gana caudal); orden
+inexistente (404); campo ausente (400); sin token (401); carrera de
+dos lecturas concurrentes (masas 500 y 800): la de 800 se procesó
+primero (aceptada), la de 500 se descartó por `masa_decreciente` al
+encontrar 800 como antecedente, snapshot final conservó 800 — **solo
+se observó este orden de procesamiento**, el contrato documenta el
+otro como igualmente posible sin afirmarlo ocurrido; dos órdenes
+distintas con snapshots independientes a nivel de API.
+
+**Evidencia de histórico (TP13) — consulta directa de BD ejecutada por
+el usuario:** esta sesión no tuvo acceso a `docker exec`/`mysql`, así
+que la consulta SQL preparada en `docs/contrato-f3-telemetria.md`
+(columnas corregidas: `temperaturac`/`caudal_kgh`) quedó pendiente
+hasta que el usuario la corrió directamente y adjuntó la salida.
+**Verificado puntualmente para las órdenes 920001/920003/920005, sin
+generalizar a escenarios no probados:** 3/2/2 filas de detalle
+respectivamente (coincide con las lecturas aceptadas de cada una;
+ninguna descartada agregó fila), masas esperadas, y
+`fechaInicioCarga`/`fechaUltimaLectura` coincidentes con la
+`fecha_lectura` de la primera y la última fila de detalle de cada
+orden. Ningún detalle de una orden apareció bajo otra.
+
+**Archivos nuevos/modificados:**
+- `model/Orden.java` (snapshot: `masaAcumuladaKg`, `densidad`,
+  `temperaturaC`, `caudalKgH`, `fechaUltimaLectura`,
+  `fechaInicioCarga`).
+- `model/DetalleCarga.java` (nuevo), `model/persistence/DetalleCargaRepository.java` (nuevo).
+- `controllers/dto/LecturaRequest.java`, `LecturaResponse.java` (nuevos).
+- `business/LecturaResultado.java` (nuevo).
+- `business/IOrdenBusiness.java`/`OrdenBusiness.java` (`registrarLectura`).
+- `controllers/OrdenRestController.java` (endpoint nuevo, OpenAPI).
+- `postman/iw3-f3-telemetria.postman_collection.json` (nuevo).
+- `docs/contrato-f3-telemetria.md` (nuevo), `docs/decisiones.md`,
+  `docs/requisitos.md`, este archivo.
+
+**Estado de F3 como fase:** sigue **abierta, no cerrada**. Con esta
+unidad, TP08–TP13 quedan verificados; dentro del alcance de F3 (ver
+matriz de cobertura en `docs/requisitos.md`) quedan pendientes: TP14
+(frecuencia configurable, opcional en el parcial, no adelantada),
+TP15–TP19 (cierre de carga, pesaje final, conciliación — F4, fuera de
+alcance de esta sesión), TP20/TP21 todavía
+en curso (faltan las transiciones de F4), y TP22 (cobertura completa
+1–5 sin UI) no se puede declarar hasta que F4 exista. **Próximo paso:**
+no se inicia F4 en esta entrada; antes de implementarla corresponde
+presentar su contrato para revisión, igual que las dos unidades de F3.

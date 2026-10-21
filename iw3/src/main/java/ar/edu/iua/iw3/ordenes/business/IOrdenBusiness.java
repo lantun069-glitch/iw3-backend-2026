@@ -39,4 +39,22 @@ public interface IOrdenBusiness {
 	 */
 	public Orden activar(Integer orderNumber, Integer clave)
 			throws NotFoundException, InvalidStateException, InvalidActivationKeyException, BusinessException;
+
+	/**
+	 * Procesa una lectura de telemetria. Requiere que la orden exista,
+	 * este en estado 2 y ya tenga fechaActivacion (decision del equipo,
+	 * ver docs/decisiones.md). Si caudalKgH&lt;=0, masaAcumuladaKg&lt;=0
+	 * o masaAcumuladaKg es estrictamente menor que la ultima masa
+	 * aceptada (si existe antecedente), la lectura se descarta: no
+	 * modifica snapshot ni genera DetalleCarga, y se devuelve el motivo
+	 * (prioridad caudal_no_positivo &gt; masa_no_positiva &gt;
+	 * masa_decreciente). Si es aceptada, actualiza el snapshot de Orden,
+	 * fija fechaInicioCarga la primera vez (sin sobreescribirla despues)
+	 * y agrega una fila en DetalleCarga, todo con la misma fecha/hora.
+	 * Misma proteccion de concurrencia (PESSIMISTIC_WRITE) que
+	 * registrarTara/activar.
+	 */
+	public LecturaResultado registrarLectura(Integer orderNumber, BigDecimal masaAcumuladaKg, BigDecimal densidad,
+			BigDecimal temperaturaC, BigDecimal caudalKgH)
+			throws NotFoundException, InvalidStateException, BusinessException;
 }

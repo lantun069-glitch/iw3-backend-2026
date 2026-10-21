@@ -23,8 +23,11 @@ import ar.edu.iua.iw3.controllers.Constants;
 import ar.edu.iua.iw3.ordenes.business.IOrdenBusiness;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
+import ar.edu.iua.iw3.ordenes.business.LecturaResultado;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionResponse;
+import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaRequest;
+import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.TaraRequest;
@@ -43,9 +46,12 @@ import jakarta.validation.Valid;
 
 /**
  * F2 cubrio la recepcion de una orden (recibir()). F3, primera unidad,
- * agrega tara/activacion (registrarTara()/activar()). No expone
- * CRUD/consulta para Orden ni para sus referencias (Camion/Chofer/
- * Cliente/Producto); eso no esta pedido para estas unidades.
+ * agrega tara/activacion (registrarTara()/activar()); segunda unidad,
+ * telemetria (registrarLectura()). No expone CRUD/consulta para Orden
+ * ni para sus referencias (Camion/Chofer/Cliente/Producto); eso no
+ * esta pedido para estas unidades. No hay endpoint de consulta del
+ * snapshot/historico: la respuesta de cada lectura ya devuelve el
+ * snapshot actual, suficiente para esta unidad.
  *
  * La validacion de entrada (400) se maneja con @ExceptionHandler LOCAL
  * a este controlador (no un @ControllerAdvice global, para no introducir
@@ -197,6 +203,57 @@ public class OrdenRestController extends BaseRestController {
 			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
 		} catch (InvalidActivationKeyException e) {
 			return new ResponseEntity<>(response.build(HttpStatus.BAD_REQUEST, null, e.getMessage()), HttpStatus.BAD_REQUEST);
+		} catch (BusinessException e) {
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Operation(summary = "Registrar una lectura de telemetria (dentro de estado 2, orden activada)",
+			description = "Procesa una lectura de masa acumulada (kg), densidad, temperatura (C) y caudal "
+					+ "(kg/h). Requiere que la orden exista, este en estado 2 y ya tenga fechaActivacion "
+					+ "(decision del equipo: sin activacion no se aceptan lecturas). Una lectura con caudal<=0, "
+					+ "masa<=0, o masa estrictamente menor a la ultima aceptada se descarta (aceptada=false, con "
+					+ "motivoDescarte): no es un error, siempre responde 200 y el snapshot queda sin cambios. "
+					+ "La primera lectura aceptada fija fechaInicioCarga; no se vuelve a modificar despues. "
+					+ "Requiere autenticacion JWT.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Lectura procesada (aceptada o descartada; ver el campo aceptada).",
+					content = @Content(schema = @Schema(implementation = LecturaResponse.class), examples = {
+							@ExampleObject(name = "Aceptada", value = "{\"orderNumber\":900001,\"aceptada\":true,\"motivoDescarte\":null,\"masaAcumuladaKg\":4000.000,\"densidad\":0.5400,\"temperaturaC\":18.50,\"caudalKgH\":3000.000,\"fechaUltimaLectura\":\"2026-10-21T10:00:00.123456\",\"fechaInicioCarga\":\"2026-10-21T10:00:00.123456\"}"),
+							@ExampleObject(name = "Descartada (caudal no positivo)", value = "{\"orderNumber\":900001,\"aceptada\":false,\"motivoDescarte\":\"caudal_no_positivo\",\"masaAcumuladaKg\":null,\"densidad\":null,\"temperaturaC\":null,\"caudalKgH\":null,\"fechaUltimaLectura\":null,\"fechaInicioCarga\":null}")
+					})),
+			@ApiResponse(responseCode = "400", description = "Algun campo ausente, o con mas decimales/enteros que la precision admitida.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"masaAcumuladaKg: must not be null\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 2, o no fue activada todavia.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = {
+							@ExampleObject(name = "Estado incompatible", value = "{\"message\":\"La orden orderNumber=900001 no esta en estado 2 (estado actual: 1)\",\"code\":409,\"devInfo\":\"No stack trace\"}"),
+							@ExampleObject(name = "Sin activar", value = "{\"message\":\"La orden orderNumber=900001 todavia no fue activada\",\"code\":409,\"devInfo\":\"No stack trace\"}")
+					})),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@PostMapping(value = "/{orderNumber}/lecturas", consumes = MediaType.APPLICATION_JSON_VALUE,
+			produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<?> registrarLectura(@PathVariable Integer orderNumber,
+			@org.springframework.web.bind.annotation.RequestBody @Valid LecturaRequest request) {
+		try {
+			LecturaResultado resultado = ordenBusiness.registrarLectura(orderNumber, request.getMasaAcumuladaKg(),
+					request.getDensidad(), request.getTemperaturaC(), request.getCaudalKgH());
+			Orden orden = resultado.getOrden();
+			LecturaResponse body = new LecturaResponse(orden.getOrderNumber(), resultado.isAceptada(),
+					resultado.getMotivoDescarte(), orden.getMasaAcumuladaKg(), orden.getDensidad(),
+					orden.getTemperaturaC(), orden.getCaudalKgH(), orden.getFechaUltimaLectura(),
+					orden.getFechaInicioCarga());
+			return new ResponseEntity<>(body, HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (InvalidStateException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
 		} catch (BusinessException e) {
 			return new ResponseEntity<>(
 					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),

@@ -24,12 +24,14 @@ import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ProductoDTO;
 import ar.edu.iua.iw3.ordenes.model.Camion;
 import ar.edu.iua.iw3.ordenes.model.Chofer;
 import ar.edu.iua.iw3.ordenes.model.Cliente;
+import ar.edu.iua.iw3.ordenes.model.DetalleCarga;
 import ar.edu.iua.iw3.ordenes.model.HistorialEstado;
 import ar.edu.iua.iw3.ordenes.model.Orden;
 import ar.edu.iua.iw3.ordenes.model.Producto;
 import ar.edu.iua.iw3.ordenes.model.persistence.CamionRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.ChoferRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.ClienteRepository;
+import ar.edu.iua.iw3.ordenes.model.persistence.DetalleCargaRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.HistorialEstadoRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.OrdenRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.ProductoRepository;
@@ -54,6 +56,12 @@ public class OrdenBusiness implements IOrdenBusiness {
 	private static final int CLAVE_MIN = 10000;
 	private static final int CLAVE_RANGO = 90000;
 
+	/** Motivos de descarte de una lectura, en orden de prioridad cuando
+	 * varios aplican a la vez (ver registrarLectura). */
+	private static final String MOTIVO_CAUDAL_NO_POSITIVO = "caudal_no_positivo";
+	private static final String MOTIVO_MASA_NO_POSITIVA = "masa_no_positiva";
+	private static final String MOTIVO_MASA_DECRECIENTE = "masa_decreciente";
+
 	@Autowired
 	private OrdenRepository ordenDAO;
 	@Autowired
@@ -66,6 +74,8 @@ public class OrdenBusiness implements IOrdenBusiness {
 	private ProductoRepository productoDAO;
 	@Autowired
 	private HistorialEstadoRepository historialDAO;
+	@Autowired
+	private DetalleCargaRepository detalleCargaDAO;
 
 	@Override
 	@Transactional(rollbackFor = Exception.class)
@@ -209,6 +219,83 @@ public class OrdenBusiness implements IOrdenBusiness {
 
 			return orden;
 		} catch (NotFoundException | InvalidStateException | InvalidActivationKeyException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public LecturaResultado registrarLectura(Integer orderNumber, BigDecimal masaAcumuladaKg, BigDecimal densidad,
+			BigDecimal temperaturaC, BigDecimal caudalKgH) throws NotFoundException, InvalidStateException, BusinessException {
+		try {
+			// Mismo bloqueo que registrarTara/activar: serializa lecturas
+			// concurrentes sobre la misma orden para que la regla de masa
+			// decreciente se evalue siempre contra el ultimo valor realmente
+			// confirmado, no contra uno leido antes de que otra transaccion
+			// terminara de escribir. Esto ordena el PROCESAMIENTO bajo el
+			// lock; no garantiza el orden de llegada por red (ver
+			// docs/decisiones.md).
+			Orden orden = ordenDAO.findByOrderNumberForUpdate(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+
+			if (orden.getEstado() != 2) {
+				throw InvalidStateException.builder().message("La orden orderNumber=" + orderNumber
+						+ " no esta en estado 2 (estado actual: " + orden.getEstado() + ")").build();
+			}
+			if (orden.getFechaActivacion() == null) {
+				throw InvalidStateException.builder()
+						.message("La orden orderNumber=" + orderNumber + " todavia no fue activada").build();
+			}
+
+			// Prioridad explicita cuando varios motivos aplican a la vez:
+			// caudal_no_positivo > masa_no_positiva > masa_decreciente.
+			String motivoDescarte = null;
+			if (caudalKgH.compareTo(BigDecimal.ZERO) <= 0) {
+				motivoDescarte = MOTIVO_CAUDAL_NO_POSITIVO;
+			} else if (masaAcumuladaKg.compareTo(BigDecimal.ZERO) <= 0) {
+				motivoDescarte = MOTIVO_MASA_NO_POSITIVA;
+			} else if (orden.getMasaAcumuladaKg() != null && masaAcumuladaKg.compareTo(orden.getMasaAcumuladaKg()) < 0) {
+				// Sin antecedente (snapshot todavia null) esta regla no aplica.
+				// Masa igual a la anterior no se descarta (ver docs/requisitos.md, TP11).
+				motivoDescarte = MOTIVO_MASA_DECRECIENTE;
+			}
+
+			if (motivoDescarte != null) {
+				// Descartada: no se toca snapshot, fechas ni DetalleCarga.
+				return new LecturaResultado(orden, false, motivoDescarte);
+			}
+
+			// Misma fecha/hora para snapshot, detalle, y fechaInicioCarga si
+			// esta es la primera lectura aceptada de esta orden. Truncada a
+			// microsegundos por el mismo motivo que fechaActivacion (ver
+			// activar()): que coincida con la precision real de la columna.
+			LocalDateTime ahora = LocalDateTime.now(ZONA_RECEPCION).truncatedTo(ChronoUnit.MICROS);
+
+			orden.setMasaAcumuladaKg(masaAcumuladaKg);
+			orden.setDensidad(densidad);
+			orden.setTemperaturaC(temperaturaC);
+			orden.setCaudalKgH(caudalKgH);
+			orden.setFechaUltimaLectura(ahora);
+			if (orden.getFechaInicioCarga() == null) {
+				orden.setFechaInicioCarga(ahora);
+			}
+			orden = ordenDAO.save(orden);
+
+			DetalleCarga detalle = new DetalleCarga();
+			detalle.setOrden(orden);
+			detalle.setMasaAcumuladaKg(masaAcumuladaKg);
+			detalle.setDensidad(densidad);
+			detalle.setTemperaturaC(temperaturaC);
+			detalle.setCaudalKgH(caudalKgH);
+			detalle.setFechaLectura(ahora);
+			detalleCargaDAO.save(detalle);
+
+			return new LecturaResultado(orden, true, null);
+		} catch (NotFoundException | InvalidStateException e) {
 			throw e;
 		} catch (Exception e) {
 			log.error(e.getMessage(), e);
