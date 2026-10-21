@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,11 +17,18 @@ import org.springframework.web.bind.annotation.RestController;
 
 import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.business.execption.FoundException;
+import ar.edu.iua.iw3.business.execption.NotFoundException;
 import ar.edu.iua.iw3.controllers.BaseRestController;
 import ar.edu.iua.iw3.controllers.Constants;
 import ar.edu.iua.iw3.ordenes.business.IOrdenBusiness;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
+import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionRequest;
+import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionResponse;
+import ar.edu.iua.iw3.ordenes.controllers.dto.TaraRequest;
+import ar.edu.iua.iw3.ordenes.controllers.dto.TaraResponse;
 import ar.edu.iua.iw3.ordenes.model.Orden;
 import ar.edu.iua.iw3.util.IStandartResponseBusiness;
 import ar.edu.iua.iw3.util.StandartResponse;
@@ -34,9 +42,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Unidad vertical de F2: solo la recepcion de una orden. No expone
+ * F2 cubrio la recepcion de una orden (recibir()). F3, primera unidad,
+ * agrega tara/activacion (registrarTara()/activar()). No expone
  * CRUD/consulta para Orden ni para sus referencias (Camion/Chofer/
- * Cliente/Producto); eso no esta pedido para esta unidad.
+ * Cliente/Producto); eso no esta pedido para estas unidades.
  *
  * La validacion de entrada (400) se maneja con @ExceptionHandler LOCAL
  * a este controlador (no un @ControllerAdvice global, para no introducir
@@ -47,19 +56,19 @@ import jakarta.validation.Valid;
  * la lista de rutas publicas, y no se la agrega: ver docs/decisiones.md).
  * Manejando la excepcion aqui, nunca se llega a ese forward.
  *
- * Ninguno de los catch de este controlador (400 por los dos
- * @ExceptionHandler, 409 y 500 en recibir()) le pasa la excepcion real
- * a StandartResponse: todos pasan null como "ex", para que
- * getDevInfo() devuelva "No stack trace" en vez de un stacktrace real,
- * independientemente de dev.info.enabled. El 409 usa el mensaje propio
- * de FoundException (no expone detalle de la causa). El 500 usa un
- * mensaje generico fijo, porque el mensaje de BusinessException puede
- * terminar reflejando el toString() de la causa interna segun el
- * constructor Lombok que se haya invocado (ver docs/decisiones.md).
+ * Ninguno de los catch de este controlador le pasa la excepcion real a
+ * StandartResponse: todos pasan null como "ex", para que getDevInfo()
+ * devuelva "No stack trace" en vez de un stacktrace real,
+ * independientemente de dev.info.enabled. Los 404/409/400 de negocio
+ * usan el mensaje propio de la excepcion (ninguno expone detalle de
+ * causa interna ni valores de clave). El 500 usa un mensaje generico
+ * fijo, porque el mensaje de BusinessException puede terminar
+ * reflejando el toString() de la causa interna segun el constructor
+ * Lombok que se haya invocado (ver docs/decisiones.md).
  */
 @RestController
 @RequestMapping(Constants.URL_ORDERS)
-@Tag(description = "Recepcion de ordenes de carga (F2)", name = "Orden")
+@Tag(description = "Recepcion y tara/activacion de ordenes de carga (F2/F3)", name = "Orden")
 public class OrdenRestController extends BaseRestController {
 
 	@Autowired
@@ -106,6 +115,89 @@ public class OrdenRestController extends BaseRestController {
 		} catch (BusinessException e) {
 			// ex=null a proposito; mensaje generico fijo (no e.getMessage()):
 			// no se expone detalle interno de la causa al cliente.
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Operation(summary = "Registrar la tara (estado 1 -> 2)",
+			description = "Registra el pesaje inicial (camion vacio), genera la clave de activacion de 5 "
+					+ "digitos y transiciona la orden a estado 2. Requiere que la orden exista y este en "
+					+ "estado 1. La clave devuelta no se repite en ninguna otra respuesta ni se registra en "
+					+ "logs. Requiere autenticacion JWT.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Tara registrada, orden en estado 2.",
+					content = @Content(schema = @Schema(implementation = TaraResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"estado\":2,\"taraKg\":12000.000,\"fechaTara\":\"2026-10-21T09:00:00\",\"claveActivacion\":54231}"))),
+			@ApiResponse(responseCode = "400", description = "taraKg ausente, no positivo, o con mas de 3 decimales/12 enteros.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"taraKg: must be greater than 0\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 1.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"La orden orderNumber=900001 no esta en estado 1 (estado actual: 2)\",\"code\":409,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@PostMapping(value = "/{orderNumber}/tara", consumes = MediaType.APPLICATION_JSON_VALUE,
+			produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<?> registrarTara(@PathVariable Integer orderNumber,
+			@org.springframework.web.bind.annotation.RequestBody @Valid TaraRequest request) {
+		String actor = getUserLogged().getUsername();
+		try {
+			Orden orden = ordenBusiness.registrarTara(orderNumber, request.getTaraKg(), actor);
+			TaraResponse body = new TaraResponse(orden.getOrderNumber(), orden.getEstado(), orden.getTaraKg(),
+					orden.getFechaTara(), orden.getClaveActivacion());
+			return new ResponseEntity<>(body, HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (InvalidStateException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
+		} catch (BusinessException e) {
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Operation(summary = "Activar el instrumento de carga (dentro de estado 2)",
+			description = "Valida la clave de activacion contra la orden identificada por orderNumber y, si "
+					+ "coincide, devuelve el preset. Requiere que la orden exista y este en estado 2. "
+					+ "Idempotente mientras la orden siga en estado 2: una clave correcta repetida devuelve el "
+					+ "mismo preset y la misma fechaActivacion ya fijada, sin volver a escribirla. No cambia el "
+					+ "estado de la orden. Requiere autenticacion JWT.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Clave correcta: preset devuelto.",
+					content = @Content(schema = @Schema(implementation = ActivacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"presetKg\":10000.500,\"fechaActivacion\":\"2026-10-21T09:05:00\"}"))),
+			@ApiResponse(responseCode = "400", description = "Clave ausente/fuera de [10000,99999] (validacion), o clave que no coincide con la de la orden.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = {
+							@ExampleObject(name = "Clave fuera de rango", value = "{\"message\":\"clave: must be greater than or equal to 10000\",\"code\":400,\"devInfo\":\"No stack trace\"}"),
+							@ExampleObject(name = "Clave incorrecta", value = "{\"message\":\"Clave de activacion incorrecta\",\"code\":400,\"devInfo\":\"No stack trace\"}")
+					})),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 2.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"La orden orderNumber=900001 no esta en estado 2 (estado actual: 1)\",\"code\":409,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@PostMapping(value = "/{orderNumber}/activacion", consumes = MediaType.APPLICATION_JSON_VALUE,
+			produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<?> activar(@PathVariable Integer orderNumber,
+			@org.springframework.web.bind.annotation.RequestBody @Valid ActivacionRequest request) {
+		try {
+			Orden orden = ordenBusiness.activar(orderNumber, request.getClave());
+			ActivacionResponse body = new ActivacionResponse(orden.getOrderNumber(), orden.getPresetKg(),
+					orden.getFechaActivacion());
+			return new ResponseEntity<>(body, HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (InvalidStateException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
+		} catch (InvalidActivationKeyException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.BAD_REQUEST, null, e.getMessage()), HttpStatus.BAD_REQUEST);
+		} catch (BusinessException e) {
 			return new ResponseEntity<>(
 					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
 					HttpStatus.INTERNAL_SERVER_ERROR);

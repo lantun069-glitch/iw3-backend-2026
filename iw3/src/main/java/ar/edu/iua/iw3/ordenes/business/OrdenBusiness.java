@@ -1,7 +1,10 @@
 package ar.edu.iua.iw3.ordenes.business;
 
+import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -10,6 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.business.execption.FoundException;
+import ar.edu.iua.iw3.business.execption.NotFoundException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.CamionDTO;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ChoferDTO;
@@ -42,6 +48,11 @@ public class OrdenBusiness implements IOrdenBusiness {
 	 * violacion de integridad. No se traduce cualquier error de
 	 * integridad a "orden duplicada". */
 	private static final String NOMBRE_CONSTRAINT_ORDER_NUMBER = "uk_orden_order_number";
+
+	/** Generacion de la clave de activacion: entero al azar en [10000,99999]. */
+	private static final SecureRandom CLAVE_RANDOM = new SecureRandom();
+	private static final int CLAVE_MIN = 10000;
+	private static final int CLAVE_RANGO = 90000;
 
 	@Autowired
 	private OrdenRepository ordenDAO;
@@ -115,6 +126,89 @@ public class OrdenBusiness implements IOrdenBusiness {
 
 			return orden;
 		} catch (FoundException | BusinessException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public Orden registrarTara(Integer orderNumber, BigDecimal taraKg, String actor)
+			throws NotFoundException, InvalidStateException, BusinessException {
+		try {
+			// PESSIMISTIC_WRITE: serializa dos registros de tara concurrentes
+			// sobre la misma orderNumber. El segundo en obtener el lock ve el
+			// estado ya en 2 (escrito y confirmado por el primero) y rechaza.
+			Orden orden = ordenDAO.findByOrderNumberForUpdate(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+
+			if (orden.getEstado() != 1) {
+				throw InvalidStateException.builder().message("La orden orderNumber=" + orderNumber
+						+ " no esta en estado 1 (estado actual: " + orden.getEstado() + ")").build();
+			}
+
+			LocalDateTime ahora = LocalDateTime.now(ZONA_RECEPCION);
+			int clave = CLAVE_MIN + CLAVE_RANDOM.nextInt(CLAVE_RANGO);
+
+			orden.setTaraKg(taraKg);
+			orden.setFechaTara(ahora);
+			orden.setClaveActivacion(clave);
+			orden.setEstado(2);
+			orden = ordenDAO.save(orden);
+
+			HistorialEstado historial = new HistorialEstado();
+			historial.setOrden(orden);
+			historial.setEstadoNuevo(2);
+			historial.setFechaHora(ahora);
+			historial.setUsuarioOProceso(actor);
+			historialDAO.save(historial);
+
+			return orden;
+		} catch (NotFoundException | InvalidStateException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public Orden activar(Integer orderNumber, Integer clave)
+			throws NotFoundException, InvalidStateException, InvalidActivationKeyException, BusinessException {
+		try {
+			// Mismo bloqueo que registrarTara: dos activaciones correctas
+			// concurrentes se serializan; la segunda, tras esperar el lock,
+			// encuentra fechaActivacion ya fijada y no la vuelve a escribir.
+			Orden orden = ordenDAO.findByOrderNumberForUpdate(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+
+			if (orden.getEstado() != 2) {
+				throw InvalidStateException.builder().message("La orden orderNumber=" + orderNumber
+						+ " no esta en estado 2 (estado actual: " + orden.getEstado() + ")").build();
+			}
+
+			// Se valida siempre, incluso si la orden ya fue activada antes.
+			if (!orden.getClaveActivacion().equals(clave)) {
+				throw InvalidActivationKeyException.builder().message("Clave de activacion incorrecta").build();
+			}
+
+			if (orden.getFechaActivacion() == null) {
+				// Truncado a microsegundos para que coincida exactamente con la
+				// precision real de la columna (datetime(6)): sin esto, la
+				// respuesta de esta misma llamada (con el valor en memoria, en
+				// nanosegundos) no coincidia con la de una activacion repetida
+				// que relee el valor ya truncado por la base.
+				orden.setFechaActivacion(LocalDateTime.now(ZONA_RECEPCION).truncatedTo(ChronoUnit.MICROS));
+				orden = ordenDAO.save(orden);
+			}
+
+			return orden;
+		} catch (NotFoundException | InvalidStateException | InvalidActivationKeyException e) {
 			throw e;
 		} catch (Exception e) {
 			log.error(e.getMessage(), e);

@@ -1,7 +1,12 @@
 package ar.edu.iua.iw3.ordenes.business;
 
+import java.math.BigDecimal;
+
 import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.business.execption.FoundException;
+import ar.edu.iua.iw3.business.execption.NotFoundException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.model.Orden;
 
@@ -12,4 +17,26 @@ public interface IOrdenBusiness {
 	 * transaccion. actor viene del contexto de seguridad, nunca del JSON.
 	 */
 	public Orden recibirOrden(OrdenRecepcionRequest request, String actor) throws FoundException, BusinessException;
+
+	/**
+	 * Registra la tara (pesaje inicial), genera la clave de activacion de
+	 * 5 digitos y transiciona la orden de estado 1 a estado 2, registrando
+	 * esa transicion en HistorialEstado. Requiere que la orden exista y
+	 * este en estado 1; bloquea la fila de la orden (PESSIMISTIC_WRITE)
+	 * dentro de la transaccion para serializar taras concurrentes sobre la
+	 * misma orderNumber.
+	 */
+	public Orden registrarTara(Integer orderNumber, BigDecimal taraKg, String actor)
+			throws NotFoundException, InvalidStateException, BusinessException;
+
+	/**
+	 * Valida la clave de activacion contra la orden identificada por
+	 * orderNumber (no busca por clave) y, si coincide, devuelve el preset.
+	 * Requiere que la orden exista y este en estado 2. Idempotente: si ya
+	 * estaba activada, vuelve a validar la clave igual, pero no sobre-
+	 * escribe fechaActivacion. No modifica el estado ni agrega una fila en
+	 * HistorialEstado. Misma proteccion de concurrencia que registrarTara.
+	 */
+	public Orden activar(Integer orderNumber, Integer clave)
+			throws NotFoundException, InvalidStateException, InvalidActivationKeyException, BusinessException;
 }

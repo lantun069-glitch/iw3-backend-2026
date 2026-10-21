@@ -10,13 +10,17 @@ verificar**, **verificado**, **bloqueado**, **no aplicable con
 justificación**. Estado real a esta fecha (ver cada fila para el detalle
 y la evidencia, esto es solo un resumen, no reemplaza leerlas): TP02 a
 TP07 están **verificados** para la unidad de recepción de orden (F2);
-TP20 y TP21 están **en curso** (solo cubren la transición de creación,
-no el resto del ciclo de vida); TP23 y TP24 (OpenAPI y Postman) están
-**en curso**, verificados para esa misma unidad y pendientes de ampliar
-con los endpoints de F3 en adelante; el resto de los requisitos
-funcionales (TP01, TP08–TP19, TP22, TP25 en adelante) sigue
-**pendiente**, porque las fases que les corresponden (F3 en adelante, o
-el cierre del segundo parcial para TP22) todavía no empezaron. TP36, de preparación
+TP08 y TP09 están **verificados** para la primera unidad de F3 (tara y
+activación), revisada, aprobada y publicada en la rama
+`feature/f3-tara-activacion` (la fase F3 sigue abierta, sin cierre);
+TP20 y TP21 están **en curso**
+(cubren la transición de creación y la de tara, no el resto del ciclo de
+vida); TP23 y TP24 (OpenAPI y Postman) están **en curso**, verificados
+para recepción+tara+activación y pendientes de ampliar con telemetría y
+los endpoints de F4; el resto de los requisitos funcionales (TP01,
+TP10–TP19, TP22, TP25 en adelante) sigue **pendiente**, porque las fases
+que les corresponden (segunda unidad de F3 en adelante, o el cierre del
+segundo parcial para TP22) todavía no empezaron. TP36, de preparación
 para la defensa, está en curso; todavía no se practicaron las preguntas.
 De las filas de equipo/infraestructura (EQ), EQ01 y EQ02 están en curso
 y EQ03 está verificado.
@@ -186,7 +190,28 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: clave generada está en el rango [10000,99999];
   tara registrada solo si la orden está en estado 1; se persiste la
   fecha/hora del pesaje inicial; tras la operación la orden queda en estado 2.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado** (primera unidad de F3, rama
+  `feature/f3-tara-activacion`, revisada y aprobada para publicar; la
+  fase F3 sigue abierta — ver sección "F3 — primera unidad" en
+  `docs/estado-proyecto.md`).
+  Implementación: `POST /api/v1/orders/{orderNumber}/tara` —
+  `OrdenRestController`/`OrdenBusiness.registrarTara`; clave con
+  `SecureRandom`; fila nueva en `HistorialEstado` (`estadoNuevo=2`) con
+  la misma fecha/hora que `fechaTara`; bloqueo `PESSIMISTIC_WRITE` sobre
+  la orden para la concurrencia. Contrato completo en
+  `docs/contrato-f3-tara-activacion.md`.
+  Evidencia: HTTP real contra la app corriendo (`mysqldev`) — tara
+  válida (200, clave en rango, estado 1→2), tara sobre orden inexistente
+  (404), tara repetida (409), dos taras simultáneas sobre la misma orden
+  vía `curl` en paralelo (una 200, otra 409; resultado compatible con la
+  serialización prevista por el bloqueo, no una prueba directa de
+  contención del lock). Colección Postman
+  `postman/iw3-f3-tara-activacion.postman_collection.json`: última
+  ejecución con `--iteration-count 2`, 34 requests, 40 aserciones, 0
+  fallos (17 requests/20 aserciones por corrida, incluye los casos de
+  tara). **No verificado por lectura directa de base** (sin cliente
+  MySQL ni `docker exec` disponibles en esta sesión): ver límite en
+  `docs/decisiones.md`, sección F3.
 
 ### TP09 — Activación: validar clave y devolver preset
 - Descripción: una operación de activación valida la clave de 5 dígitos
@@ -199,12 +224,37 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F3.
 - Criterio de aceptación: clave correcta devuelve el preset numérico;
   clave incorrecta no lo devuelve y no inicia la carga.
-- DATO FALTANTE: el contrato exacto de esta llamada (cómo se identifica
-  la orden — por número de orden, por la clave sola, por ambos — y qué
-  pasa ante colisión de claves entre órdenes simultáneas) no está
-  definido en T1/T2; queda como decisión de diseño pendiente antes de
-  implementar.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- DATO FALTANTE, confirmado otra vez al releer T1 para esta unidad: el
+  contrato exacto de esta llamada (cómo se identifica la orden, qué pasa
+  ante colisión de claves) no está definido en T1/T2. Resuelto por
+  **DECISIÓN DEL EQUIPO** (no por la fuente): `orderNumber` en el path,
+  clave en el body; la clave se valida contra esa orden, nunca se busca
+  por clave, lo que evita necesitar unicidad global de la clave entre
+  órdenes concurrentes. Detalle en `docs/contrato-f3-tara-activacion.md`
+  y `docs/decisiones.md`, sección F3.
+- Estado: **verificado** (misma unidad y rama que TP08). Implementación:
+  `POST /api/v1/orders/{orderNumber}/activacion` —
+  `OrdenRestController`/`OrdenBusiness.activar`; idempotente mientras la
+  orden siga en estado 2 (clave correcta repetida devuelve el mismo
+  preset y la misma `fechaActivacion`, sin regenerarla); clave incorrecta
+  → 400 con mensaje fijo, sin exponer ningún valor de clave; no modifica
+  `estado` ni agrega fila en `HistorialEstado` (decisión del equipo,
+  justificada en `docs/decisiones.md`). No cambia el estado: no inicia
+  la carga en el sentido de avanzar el ciclo de vida (eso no corresponde
+  a ningún endpoint de esta unidad).
+  Evidencia: activación correcta (200, preset + `fechaActivacion`),
+  clave incorrecta (400), clave incorrecta después de una activación
+  correcta (sigue en 400), clave fuera de rango/ausente (400 por
+  validación), activación antes de registrar tara (409), activación
+  sobre orden inexistente (404), ambos endpoints sin JWT (401), reintento
+  con clave correcta con `fechaActivacion` idéntica (verificado tras
+  corregir un bug de precisión de timestamp encontrado en esta misma
+  sesión, ver `docs/decisiones.md`), y dos activaciones correctas
+  simultáneas sobre la misma orden vía `curl` en paralelo (ambas 200,
+  `fechaActivacion` idéntica; resultado compatible con la serialización
+  prevista por el bloqueo, no una prueba directa de contención del
+  lock). Mismo límite que TP08: sin lectura directa de base en esta
+  sesión.
 
 ### TP10 — Telemetría solo durante estado 2
 - Descripción: recepción de masa acumulada (kg), densidad, temperatura
@@ -353,11 +403,17 @@ y descarte de lecturas: `docs/fuentes.md`.
   timestamp; documentar qué evento exacto dispara cada marca (ej.: no
   igualar automáticamente "tara" con "inicio real de carga", porque T1
   los describe como pasos distintos).
-- Estado: en curso — solo `fechaRecepcion` (evento de recepción/creación)
-  está verificado; pesaje inicial, inicio/fin de carga y pesaje final
-  son de F3/F4, todavía pendientes. Implementación: `Orden.fechaRecepcion`,
-  generada con zona explícita `America/Argentina/Cordoba` (ver
-  `docs/decisiones.md`). Evidencia: timestamp persistido en cada POST.
+- Estado: en curso — `fechaRecepcion` (recepción/creación) y `fechaTara`
+  (pesaje inicial) están verificados; `fechaActivacion` también está
+  verificado pero **no** se cuenta como "inicio de carga" (decisión
+  explícita de esta unidad, ver `docs/decisiones.md`, sección F3:
+  `fechaActivacion` es el instante en que la API acepta la clave, su
+  relación con el inicio real de carga se resuelve en la próxima unidad
+  de F3); fin de carga y pesaje final son de F4, todavía pendientes.
+  Implementación: `Orden.fechaRecepcion`/`fechaTara`/`fechaActivacion`,
+  generadas con zona explícita `America/Argentina/Cordoba` (ver
+  `docs/decisiones.md`). Evidencia: timestamp persistido y devuelto en
+  cada operación (recepción, tara, activación).
 
 ### TP21 — Transiciones de estado unidireccionales y auditadas
 - Descripción: los estados avanzan 1→2→3→4 sin saltos ni retrocesos; cada
@@ -379,12 +435,18 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F4.
 - Criterio de aceptación: un intento de salto o retroceso de estado se
   rechaza; se puede consultar la secuencia de transiciones de una orden.
-- Estado: en curso — solo la transición de creación (ninguno→1) está
-  verificada; el rechazo de saltos/retrocesos y las transiciones de
-  F3/F4 siguen pendientes. Implementación: `ordenes/model/HistorialEstado.java`
-  (no es la única estructura posible, es la decisión del equipo para
-  implementarlo). Evidencia: cada recepción válida genera una fila con
-  `estadoNuevo=1`, `usuarioOProceso` = usuario autenticado (nunca del
+- Estado: en curso — la transición de creación (ninguno→1) y la de tara
+  (1→2) están verificadas, incluyendo el rechazo de tara repetida (409);
+  el rechazo de saltos/retrocesos contra estados 3/4 no se puede probar
+  todavía porque ningún endpoint implementado los alcanza, y las
+  transiciones de F4 siguen pendientes. La activación **no** agrega fila
+  en `HistorialEstado` (decisión del equipo: no cambia `estado`, ver
+  `docs/decisiones.md`, sección F3). Implementación:
+  `ordenes/model/HistorialEstado.java` (no es la única estructura
+  posible, es la decisión del equipo para implementarlo). Evidencia:
+  cada recepción válida genera una fila con
+  `estadoNuevo=1`, cada tara válida genera una fila con `estadoNuevo=2`,
+  `usuarioOProceso` = usuario autenticado (nunca del
   JSON), misma fecha/hora que `Orden.fechaRecepcion`.
 
 ### TP22 — Sin interfaz gráfica para el segundo parcial
@@ -408,26 +470,33 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F5.
 - Criterio de aceptación: operaciones, esquemas, unidades y errores
   documentados coinciden con el comportamiento real de la API.
-- Estado: en curso (verificado para el único endpoint de dominio que
-  existe hasta ahora; falta documentar los que se agreguen en F3 en
+- Estado: en curso (verificado para los tres endpoints de dominio que
+  existen hasta ahora — recepción de orden, tara y activación —; falta
+  documentar los que se agreguen en la segunda unidad de F3 en
   adelante). Implementación: `ordenes/controllers/OrdenRestController.java`
-  (`@Operation`, `@ApiResponses` con ejemplos para 201/400/409/500,
+  (`@Operation`, `@ApiResponses` con ejemplos): recepción con
+  201/400/409/500, tara con 200/400/404/409/500, activación con
+  200/400 (clave incorrecta y clave fuera de rango)/404/409/500;
   `@io.swagger.v3.oas.annotations.parameters.RequestBody` con ejemplo de
-  entrada). Evidencia: `GET /v3/api-docs` verificado contra la app
-  corriendo — `paths./api/v1/orders.post` incluye summary, description,
-  ejemplo de request, y las cinco respuestas documentadas (201 con
-  ejemplo; 400 con dos ejemplos — campo obligatorio ausente y JSON
-  malformado —; 401 sin cuerpo; 409 y 500 con ejemplo), todas con el
-  esquema real (`StandartResponse`/`OrdenRecepcionResponse`). La
-  obligatoriedad y los límites de longitud de los campos del DTO
-  (`OrdenRecepcionRequest` y sus 4 DTO anidados) ya aparecían
-  correctamente en `components.schemas` sin anotación adicional, porque
-  springdoc deriva `required`/`maxLength` directamente de
-  `@NotNull`/`@NotBlank`/`@Size` — se verificó esto contra el JSON real
-  antes de agregar cualquier anotación extra, para no duplicar algo que
-  ya funcionaba. `config/OpenApiConfig.java` (base docente) provee el
-  esquema de seguridad Bearer JWT a nivel global, ya aplicado
-  (`security` en la raíz del documento, verificado).
+  entrada en los tres casos. Evidencia: `GET /v3/api-docs` verificado
+  contra la app corriendo — `paths./api/v1/orders.post` con summary,
+  description, ejemplo de request y las cinco respuestas de recepción
+  (201 con ejemplo; 400 con dos ejemplos — campo obligatorio ausente y
+  JSON malformado —; 401 sin cuerpo; 409 y 500 con ejemplo), todas con
+  el esquema real (`StandartResponse`/`OrdenRecepcionResponse`); los
+  paths nuevos `paths./api/v1/orders/{orderNumber}/tara.post` y
+  `paths./api/v1/orders/{orderNumber}/activacion.post` presentes con sus
+  respuestas documentadas (`TaraResponse`/`ActivacionResponse` para el
+  éxito). La obligatoriedad y los límites de longitud/rango de los
+  campos de los DTO (`OrdenRecepcionRequest` y sus 4 DTO anidados,
+  `TaraRequest`, `ActivacionRequest`) ya aparecían correctamente en
+  `components.schemas` sin anotación adicional, porque springdoc deriva
+  `required`/`maxLength`/`minimum`/`maximum` directamente de
+  `@NotNull`/`@NotBlank`/`@Size`/`@Min`/`@Max` — se verificó esto contra
+  el JSON real antes de agregar cualquier anotación extra, para no
+  duplicar algo que ya funcionaba. `config/OpenApiConfig.java` (base
+  docente) provee el esquema de seguridad Bearer JWT a nivel global, ya
+  aplicado (`security` en la raíz del documento, verificado).
 
 ### TP24 — Colección Postman
 - Descripción: colección Postman que prueba y valida las APIs
@@ -439,27 +508,47 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: la colección se importa sin errores, usa
   variables documentadas (no credenciales fijas) y cada request es
   ejecutable contra el entorno local.
-- Estado: en curso (verificado para la unidad de recepción de orden;
-  falta ampliar con los endpoints de F3 en adelante, según el criterio de
-  "ampliar en el final"). Implementación:
+- Estado: en curso (verificado para recepción de orden, tara y
+  activación; falta ampliar con telemetría y los endpoints de F4 en
+  adelante, según el criterio de "ampliar en el final"). Implementación:
   `postman/iw3-f2-recepcion.postman_collection.json` (6 requests: login,
   recepción válida, segunda orden reutilizando referencias existentes,
   duplicado de `orderNumber`, entrada inválida y solicitud sin token) y
+  `postman/iw3-f3-tara-activacion.postman_collection.json` (17 requests:
+  login, dos órdenes de apoyo, activación antes de tara, tara sobre
+  orden inexistente, tara válida, tara repetida, clave incorrecta, clave
+  fuera de rango, clave ausente, activación sobre orden inexistente,
+  activación válida —con aserciones de `orderNumber` y `presetKg`,
+  además de `fechaActivacion`—, reintento idempotente —mismas
+  aserciones—, clave incorrecta después de activar, ambos endpoints sin
+  token, y una tara final sobre la orden de apoyo que confirma que
+  seguía en estado 1 tras los rechazos), ambas con
   `postman/iw3-local.postman_environment.example.json` (variables sin
   valores reales). Variables de colección para URL/credenciales
   (`baseUrl`, `testUsername`, `testPassword`, sin valores por defecto
-  sensibles) y datos de prueba generados en tiempo de ejecución
-  (`orderNumber`/`externalCode` con sufijo de timestamp) para no chocar
-  con ejecuciones anteriores. Evidencia: ejecución real con
-  `postman collection run` (sin `postman login`, sin `--output`, para no
-  requerir ni dejar rastro de una cuenta externa) pasando credenciales
-  solo por `--env-var` (nunca escritas en un archivo versionado): 6/6
-  requests, 12/12 aserciones, 0 fallos. Las aserciones verifican
-  únicamente lo que la respuesta HTTP expone (status y cuerpo JSON); no
-  afirman cambios internos de base de datos que la API no permite
-  observar — esa verificación quedó documentada aparte, contra la base,
-  durante la implementación de la unidad (ver `docs/decisiones.md`,
-  sección F2).
+  sensibles) y datos de prueba generados en tiempo de ejecución para no
+  chocar con ejecuciones anteriores: F2 usa un sufijo de timestamp en
+  segundos; F3 regenera sus `orderNumber`/`extSuffix` y limpia
+  `jwtToken`/clave temporal al inicio de cada corrida completa (en el
+  pre-request del primer request, sin depender de ningún flag
+  persistente), con un valor en milisegundos acotado para no exceder el
+  rango de `Integer` — necesario porque dos corridas completas lanzadas
+  una detrás de otra en el mismo proceso pueden caer en el mismo
+  segundo. Evidencia: ejecución real con `postman collection run` (sin
+  `postman login`, sin `--output`, para no requerir ni dejar rastro de
+  una cuenta externa) pasando credenciales solo por `--env-var` (nunca
+  escritas en un archivo versionado). F2: 6/6 requests, 12/12
+  aserciones, 0 fallos. F3: 17/17 requests, 20/20 aserciones, 0 fallos
+  por corrida; verificado además con `--iteration-count 2` (dos corridas
+  completas en el mismo proceso, conservando variables de colección
+  entre ellas): 34/34 requests, 40/40 aserciones, 0 fallos, con
+  `orderNumber` distintos entre ambas corridas (confirma que la
+  reinicialización no depende de un flag persistente ni reutiliza datos
+  de una corrida anterior). Las aserciones verifican únicamente lo que
+  la respuesta HTTP expone (status y cuerpo JSON); no afirman cambios
+  internos de base de datos que la API no permite observar, ni
+  contención efectiva de un lock a partir de lanzar procesos en paralelo
+  — ver `docs/decisiones.md`, secciones F2 y F3.
 
 ### TP25 — Simulación automatizada del circuito
 - Descripción: runner/tests de Postman que simulan el circuito completo

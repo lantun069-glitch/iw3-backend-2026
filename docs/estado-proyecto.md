@@ -1,7 +1,9 @@
 # Estado del proyecto
 
-Último checkpoint: [`2026-10-21-01.md`](checkpoints/2026-10-21-01.md).
-Fase activa: **F3 — pendiente de iniciar.** **F0, F1 y F2 están
+Último checkpoint: [`2026-10-21-02.md`](checkpoints/2026-10-21-02.md).
+Fase activa: **F3 — primera unidad (tara y activación) implementada,
+revisada y aprobada; la fase sigue abierta** (falta telemetría/
+descarte/snapshot/histórico, segunda unidad de F3). **F0, F1 y F2 están
 cerradas.** El bloque de F1 (infraestructura local, arranque con
 `mysqldev`, autenticación HTTP) quedó publicado y respaldado en el
 commit `cf64c61` de `feature/setup-inicial`, árbol de trabajo limpio al
@@ -14,9 +16,13 @@ colección Postman reproducible y ejecutada. Trabajo en la rama
 `feature/f2-recepcion-ordenes`. Ver sección "F2 — primera unidad
 vertical" más abajo, "Cierre de F2" al final de esta sección, y los
 checkpoints 06 y 2026-10-21-01 para el detalle completo, límites y
-evidencia. **F3 (tara, clave de activación, telemetría — TP08–TP13)
-queda pendiente de iniciar: antes de implementar, revisar el contrato de
-tara y activación.**
+evidencia. **F3, primera unidad (tara y activación, TP08-TP09):
+implementada, revisada y aprobada, publicada en la rama
+`feature/f3-tara-activacion`** — ver sección "F3 — primera unidad" más
+abajo y el checkpoint 2026-10-21-02 para el hash y el estado del
+respaldo remoto. La segunda unidad de F3 (telemetría, descarte de
+lecturas, snapshot/histórico — TP10-TP13) sigue pendiente de iniciar;
+antes de implementarla corresponde presentar su contrato para revisión.
 
 ## Repositorios
 
@@ -455,3 +461,164 @@ se tocó ningún archivo de esa fase en esta sesión. Antes de implementar,
 revisar y presentar el contrato de tara y activación (alcance, fuente,
 archivos afectados, verificación) y esperar validación, según la sección
 1 de las reglas del equipo.
+
+## F3 — primera unidad: tara y activación (implementada, revisada y aprobada)
+
+**Alcance de esta unidad:** registro de tara (transición 1→2, con
+generación de clave de activación de 5 dígitos) y operación de
+activación (validación de clave, devolución de preset, idempotente
+mientras la orden siga en estado 2). Cubre TP08 y TP09. No incluye
+telemetría, snapshot ni histórico (siguiente unidad de F3) ni cierre/
+pesaje final (F4). Rama `feature/f3-tara-activacion`, creada desde el
+HEAD aprobado de F2 (`348c17d`), árbol de trabajo limpio al crearla.
+
+**Decisiones de contrato (detalle completo y justificación en
+`docs/decisiones.md`, sección F3; aprobadas por el usuario antes de
+implementar):**
+- `orderNumber` en el path, clave en el body; la clave se valida contra
+  la orden identificada por `orderNumber`, no se busca por clave (no
+  necesita unicidad global).
+- Tara exitosa 200; activación exitosa 200; clave incorrecta 400; clave
+  ausente/fuera de [10000,99999] 400 por validación de Bean Validation;
+  orden inexistente 404; estado incompatible 409; sin JWT 401 (sin
+  cambios en `SecurityConfiguration`); error no clasificado 500
+  genérico, sin detalle interno (mismo criterio que F2).
+- Activación idempotente mientras la orden siga en estado 2: la clave
+  se valida siempre (incluso tras una activación previa), pero
+  `fechaActivacion` se fija una sola vez y no se sobreescribe.
+- Concurrencia: `PESSIMISTIC_WRITE` sobre la fila de la orden
+  (`findByOrderNumberForUpdate`), dentro de la misma transacción que
+  tara/activación. No se agregó `@Version`.
+- Clave generada con `SecureRandom`, rango [10000,99999]; se devuelve
+  únicamente en la respuesta exitosa de la tara; nunca se registra en
+  logs ni en `observacion` de `HistorialEstado`.
+- `fechaActivacion` ≠ inicio físico real de la carga: es el instante en
+  que la API acepta la clave. La relación con la primera telemetría
+  válida queda para la siguiente unidad.
+- Nuevas excepciones de dominio (`InvalidStateException`,
+  `InvalidActivationKeyException`) viven en
+  `ordenes/business/exception`, sin modificar `business/execption`
+  (taxonomía docente heredada).
+- Rollback con `@Transactional(rollbackFor = Exception.class)`, mismo
+  criterio que `recibirOrden`; ningún error de base se traduce a 409
+  salvo el chequeo explícito de estado (que ocurre antes de cualquier
+  escritura).
+
+**Hallazgo corregido durante la verificación (no estaba previsto en la
+propuesta inicial):** la primera respuesta de una activación exitosa
+devolvía `fechaActivacion` con precisión de nanosegundos (valor en
+memoria, antes de persistir), mientras que una activación repetida leía
+el valor ya truncado a microsegundos por la columna `datetime(6)` de
+MySQL — dos representaciones distintas del mismo instante, que hacían
+fallar una comparación exacta de idempotencia. Corregido truncando a
+microsegundos (`ChronoUnit.MICROS`) antes de fijar `fechaActivacion` por
+primera vez (`OrdenBusiness.activar`).
+
+**Evidencia — HTTP real contra la app corriendo (`mysqldev`, MySQL
+local), mismo método que F1/F2:** tara válida (200, estado 1→2, clave en
+rango); tara sobre orden inexistente (404); tara repetida (409); tara
+sobre B tras intentos rechazados, prueba de que sigue en estado 1 (200);
+activación antes de tara (409); activación sobre orden inexistente
+(404); clave incorrecta (400); clave fuera de rango (400); clave ausente
+(400); activación correcta (200); reintento con clave correcta,
+`fechaActivacion` idéntica tras la corrección (200); clave incorrecta
+después de una activación correcta, sigue rechazándose (400); ambos
+endpoints sin JWT (401). Dos taras simultáneas sobre la misma orden
+(`curl` en paralelo): una 200, otra 409. Dos activaciones correctas
+simultáneas sobre la misma orden: ambas 200, con `fechaActivacion`
+idéntica. **Estos dos resultados son compatibles con la serialización
+prevista por el bloqueo pesimista del código, no una prueba directa de
+que hubo contención efectiva del lock:** lanzar dos procesos `curl` en
+paralelo no garantiza por sí solo que ambas solicitudes llegaron a
+disputar el bloqueo (no se midió tiempo de espera ni se instrumentó el
+acceso concurrente a nivel de base).
+
+**Límite de esta verificación — no se leyó la base directamente.** Esta
+sesión no tuvo acceso a un cliente MySQL ni a `docker exec` (sin
+privilegios de `sudo` interactivo en el entorno sandboxed); por eso la
+ausencia de cambios en `ordenes`/`historial_estados` ante los rechazos y
+ante la carrera de tara se sostiene en la estructura del código
+(`InvalidStateException` se lanza antes de cualquier `save()`, dentro de
+`@Transactional`) y en evidencia HTTP indirecta (la orden B siguió
+aceptando su primera tara después de los rechazos; la carrera de tara
+devolvió exactamente un 200), no en una lectura de fila verificada. No
+se ejecutó una prueba dedicada de 500 para esta unidad (mismo mecanismo
+genérico ya probado en F2).
+
+**Revisión de logs — alcance acotado.** Se buscaron las 4 claves de
+activación generadas en esta sesión en `/tmp/f3-spring.log` (stdout/
+stderr de la app local): 0 coincidencias. Esto no demuestra ausencia de
+toda fuga posible: no se revisaron otros destinos de log, ni logs de
+acceso HTTP, ni se probó con más claves que las generadas en esta
+sesión. Nota de proceso: durante la carrera de tara sobre la orden C, la
+clave de esa orden quedó impresa sin enmascarar en la salida de un
+comando de la terminal durante esa prueba manual (no en ningún archivo
+de reporte ni en este documento); se corrigió el enmascarado para el
+resto de la sesión.
+
+**Postman/OpenAPI (ampliación de TP23/TP24 a esta unidad):**
+`postman/iw3-f3-tara-activacion.postman_collection.json` (nueva,
+conserva `iw3-f2-recepcion.postman_collection.json` sin modificar), con
+aserciones de `orderNumber`/`presetKg` agregadas en los casos de
+activación y una reinicialización de datos (al inicio de cada corrida
+completa, con valores en milisegundos para no chocar entre corridas
+consecutivas) corregida tras encontrar una colisión real en la
+verificación. **Última ejecución:** `postman collection run
+--iteration-count 2` (dos corridas completas en el mismo proceso,
+conservando variables de colección entre ellas, sin `postman login` ni
+`--output`, credenciales solo por `--env-var`): **34 requests, 40
+aserciones, 0 fallos** (17 requests/20 aserciones por corrida). No
+ejercita las dos carreras concurrentes (no es práctico expresarlas en
+el runner secuencial de Postman); esas se probaron con `curl` en
+paralelo, ver evidencia arriba. `GET /v3/api-docs` verificado contra la
+app corriendo: ambos paths nuevos (`/api/v1/orders/{orderNumber}/tara` y
+`/api/v1/orders/{orderNumber}/activacion`) presentes con sus respuestas
+documentadas.
+
+**Archivos modificados o creados en esta unidad:**
+- `iw3/src/main/java/ar/edu/iua/iw3/ordenes/model/Orden.java` (campos
+  nuevos: `taraKg`, `fechaTara`, `claveActivacion`, `fechaActivacion`).
+- `iw3/src/main/java/ar/edu/iua/iw3/ordenes/business/exception/InvalidStateException.java` (nuevo).
+- `iw3/src/main/java/ar/edu/iua/iw3/ordenes/business/exception/InvalidActivationKeyException.java` (nuevo).
+- `iw3/src/main/java/ar/edu/iua/iw3/ordenes/model/persistence/OrdenRepository.java`
+  (`findByOrderNumberForUpdate`, `PESSIMISTIC_WRITE`).
+- `iw3/src/main/java/ar/edu/iua/iw3/ordenes/business/IOrdenBusiness.java` y
+  `OrdenBusiness.java` (`registrarTara`, `activar`).
+- `iw3/src/main/java/ar/edu/iua/iw3/ordenes/controllers/dto/TaraRequest.java`,
+  `TaraResponse.java`, `ActivacionRequest.java`, `ActivacionResponse.java` (nuevos).
+- `iw3/src/main/java/ar/edu/iua/iw3/ordenes/controllers/OrdenRestController.java`
+  (dos endpoints nuevos, dos `@ExceptionHandler` reutilizados, anotaciones OpenAPI).
+- `postman/iw3-f3-tara-activacion.postman_collection.json` (nuevo).
+- `docs/contrato-f3-tara-activacion.md` (nuevo).
+- `docs/decisiones.md`, `docs/requisitos.md`, este archivo (documentación).
+
+**Pendiente explícito, sin resolver en esta unidad:**
+- No se agregó ninguna fila de auditoría para la activación en
+  `HistorialEstado` (decisión del equipo: la activación no cambia
+  `estado`, solo la transición 1→2 de la tara se audita). Si se decide
+  más adelante dejar rastro también de la activación, es un cambio
+  pendiente, no implementado acá.
+- No se verificó el comportamiento ante una caída de conexión a mitad de
+  la transacción de tara/activación (mismo límite que F2 con
+  `BusinessException`).
+- Lectura directa de `ordenes`/`historial_estados` para los casos de
+  rechazo: pendiente (ver límite de verificación arriba); se puede
+  completar si en algún momento hay acceso a `docker exec`/`mysql` sin
+  intervención manual del usuario.
+- Esta unidad queda **aprobada y publicada**, pero **F3 como fase sigue
+  abierta**: no se declara cerrada. La segunda unidad (telemetría,
+  descarte de lecturas, snapshot e histórico — TP10-TP13) sigue
+  pendiente de iniciar.
+
+**Aprobación y publicación de esta unidad:** el usuario aprobó registrar
+y publicar esta unidad (tara y activación) en base al trabajo ya
+revisado y a los resultados de Postman reportados en esta sesión. Antes
+de publicar se corrigió una referencia incorrecta en
+`docs/decisiones.md` (la frase sobre `fechaActivacion` atribuía a F2 un
+criterio que en realidad se aplicó primero a la tara dentro de esta
+misma unidad de F3, no en F2). Checkpoint de esta entrada:
+[`checkpoints/2026-10-21-02.md`](checkpoints/2026-10-21-02.md). **Próximo
+paso:** presentar el contrato de la segunda unidad de F3 (telemetría,
+descarte de lecturas, snapshot e histórico) para revisión, antes de
+implementar — no implementar nada de esa unidad sin esa validación
+previa.

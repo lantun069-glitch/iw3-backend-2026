@@ -396,3 +396,143 @@ solo las decisiones y su origen.
   anotación (`@ApiResponse` por caso) más allá del `@Tag` básico — el
   contrato queda documentado en `docs/contrato-f2-recepcion.md` en vez
   de en anotaciones exhaustivas, para esta unidad.
+
+## F3 — primera unidad: tara y activación (TP08/TP09)
+
+Detalle completo del contrato en `docs/contrato-f3-tara-activacion.md`.
+Aquí las decisiones y su origen. Contrato validado por el usuario antes
+de implementar (ver turno anterior de esta sesión); lo que sigue es lo
+efectivamente implementado y verificado.
+
+- **Identificación de la orden y de la clave (resuelve el DATO FALTANTE
+  de T1):** T1 no especifica cómo se identifica la orden en la llamada
+  de tara/activación ni si hay riesgo de colisión de clave entre
+  órdenes simultáneas en estado 2 (ver `docs/fuentes.md` y la relectura
+  de esta sesión). DECISIÓN DEL EQUIPO: `orderNumber` en el path
+  (reutiliza el identificador público ya establecido en F2), clave en
+  el body (nunca en la URL, para no dejarla en logs de acceso). La
+  clave se valida contra la orden ya identificada por `orderNumber`,
+  nunca se busca por clave: esto resuelve el riesgo de colisión sin
+  necesitar unicidad global de la clave entre órdenes concurrentes.
+- **Códigos HTTP (DECISIÓN DEL EQUIPO, sin fuente de cátedra que los
+  fije):** tara y activación exitosas, `200` (no `201`: ninguna de las
+  dos crea un recurso nuevo). Clave incorrecta, `400` — mismo criterio
+  que el resto de los `400` ya usados en `OrdenRestController`: valor
+  sintácticamente válido, rechazado por una regla de negocio, no un
+  problema de autenticación (se evita mezclar esa semántica con el
+  `401` ya reservado para JWT). Clave ausente o fuera de
+  `[10000,99999]`, `400` por Bean Validation (`@NotNull @Min(10000)
+  @Max(99999)` en `ActivacionRequest`), antes de llegar al negocio.
+  Orden inexistente, `404` (`NotFoundException`, ya existente en
+  `business/execption`, reutilizada — hasta esta unidad no se usaba
+  desde ningún controller). Estado incompatible, `409`
+  (`InvalidStateException`, nueva). JWT ausente/inválido, `401`, sin
+  tocar `SecurityConfiguration` (ya cubierto por `anyRequest()
+  .authenticated()`, verificado en el código antes de implementar).
+  Error no clasificado, `500` genérico sin detalle interno, mismo
+  patrón que F2 (`ex=null`, mensaje fijo).
+- **Activación idempotente (DECISIÓN DEL EQUIPO):** mientras la orden
+  siga en estado 2, una clave correcta repetida devuelve el mismo
+  preset y la misma `fechaActivacion` ya fijada, sin volver a
+  escribirla. La clave se valida siempre, incluso después de una
+  activación exitosa (no hay un atajo que la omita una vez activada).
+  En estados posteriores a 2 (todavía no alcanzables por ningún
+  endpoint implementado), la precondición de estado sigue rechazando
+  con `409` antes de llegar a comparar la clave.
+- **Concurrencia — bloqueo pesimista, sin `@Version` (DECISIÓN DEL
+  EQUIPO):** `OrdenRepository.findByOrderNumberForUpdate` usa
+  `@Lock(LockModeType.PESSIMISTIC_WRITE)` sobre una consulta JPQL por
+  `orderNumber`, invocada dentro de la misma transacción
+  (`@Transactional(rollbackFor = Exception.class)`) que hace la
+  comprobación de estado y la escritura. El diseño busca serializar dos
+  tara o dos activaciones concurrentes sobre la misma orden: la segunda
+  debería esperar el lock de la primera y, al obtenerlo, ver el estado
+  (o `fechaActivacion`) ya actualizado. Se lanzaron dos `curl` en
+  paralelo (ver evidencia en `docs/estado-proyecto.md`, sección F3) y el
+  resultado observado es **compatible con** ese diseño: dos taras
+  simultáneas → una `200`, otra `409`; dos activaciones correctas
+  simultáneas → ambas `200` con `fechaActivacion` idéntica. Esto no es
+  una prueba directa de contención del lock: lanzar dos procesos `curl`
+  en paralelo no garantiza por sí solo que ambas solicitudes llegaron a
+  disputar el bloqueo (no se midió tiempo de espera ni se instrumentó el
+  acceso concurrente a nivel de base); el resultado observado es
+  consistente con la serialización prevista por el código, pero esta
+  prueba por sí sola no la demuestra de forma concluyente. No se agregó
+  `@Version`: la única protección de concurrencia de esta unidad es el
+  bloqueo.
+- **Generación de la clave:** `SecureRandom`, no
+  `ThreadLocalRandom`/`Random` — decisión del equipo, sin que la fuente
+  exija un generador criptográfico; se devuelve únicamente en la
+  respuesta exitosa de la tara (nunca en la de activación, nunca en
+  logs, nunca en `observacion` de `HistorialEstado`).
+- **`fechaActivacion` no es "inicio real de carga" (DECISIÓN DEL
+  EQUIPO, mismo criterio ya aplicado a la tara — no equiparar
+  automáticamente un evento administrativo con el inicio real de carga,
+  extendido acá a la activación):** es el instante en que la
+  API acepta la clave. La relación con la primera telemetría válida
+  (y si hace falta un campo separado `fechaInicioCarga`) se resuelve en
+  la siguiente unidad de F3, contrastando la fuente, no en esta.
+- **Auditoría — solo la transición 1→2 (DECISIÓN DEL EQUIPO):** la tara
+  agrega una fila en `HistorialEstado` (`estadoNuevo=2`,
+  `fechaHora=fechaTara`, `usuarioOProceso=actor` del contexto de
+  seguridad), mismo patrón que la creación en F2. La activación **no**
+  agrega otra fila ni modifica la existente, porque no cambia `estado`
+  — T1 exige auditar "cada cambio de estado", y la activación no lo es
+  en el diseño de esta unidad (ver el contrato, donde estado 2 abarca
+  tanto "con tara" como "cargando"). No se creó ninguna tabla de
+  auditoría nueva.
+- **Excepciones de dominio fuera de `business/execption`:**
+  `InvalidStateException` e `InvalidActivationKeyException` viven en
+  `ordenes/business/exception` (paquete nuevo, específico de este
+  dominio), para no modificar la taxonomía heredada de la cátedra
+  (`NotFoundException`/`FoundException`/`BusinessException`). Sí se
+  reutilizó `NotFoundException` tal cual (ya existía, no se había
+  usado desde ningún controller hasta esta unidad).
+- **Hallazgo durante la verificación, corregido en esta misma unidad
+  (no estaba en la propuesta original):** la respuesta de una
+  activación exitosa devolvía `fechaActivacion` con precisión de
+  nanosegundos (el objeto `LocalDateTime` en memoria, antes de
+  persistir), mientras que una activación repetida leía el valor ya
+  truncado a microsegundos por la columna `datetime(6)` de MySQL —
+  dos representaciones distintas del mismo instante por una diferencia
+  de precisión, no un error de concurrencia ni de lógica de negocio.
+  Se detectó comparando por igualdad de string las dos respuestas en
+  una prueba HTTP real (`.../activacion` llamado dos veces con la
+  misma clave sobre la misma orden): la primera vez devolvía
+  `...502079077`, la segunda `...502079`. Corregido truncando con
+  `LocalDateTime.now(ZONA_RECEPCION).truncatedTo(ChronoUnit.MICROS)`
+  antes de fijar `fechaActivacion` por primera vez, en
+  `OrdenBusiness.activar`. Verificado de nuevo tras el fix (DevTools
+  recompiló y reinició la app automáticamente): ambas respuestas
+  devuelven el mismo valor. No se aplicó el mismo truncado a
+  `fechaTara` ni a `fechaRecepcion` (F2): no hacía falta para esta
+  unidad porque ninguna de las dos se compara por igualdad entre dos
+  respuestas distintas; queda como posible ajuste de consistencia para
+  cuando sea relevante, no como bug pendiente de esta unidad.
+- **Verificación funcional — alcance real, sin inflar la evidencia:**
+  se ejecutó HTTP real contra la app levantada localmente con
+  `mysqldev` y MySQL en Docker (el usuario levantó el contenedor con
+  `sudo`; no se dispuso de `sudo` interactivo ni de acceso al socket de
+  Docker en el entorno de ejecución de esta sesión de trabajo). **No se
+  leyó la base directamente** (sin cliente `mysql`, sin `docker exec`,
+  sin driver Python disponible): la ausencia de cambios en
+  `ordenes`/`historial_estados` ante los rechazos se apoya en la
+  estructura del código (la excepción de estado se lanza antes de
+  cualquier `save()`, dentro de la misma transacción) y en evidencia
+  HTTP indirecta — la orden usada solo para intentos rechazados
+  (activación antes de tara, llamada sin token) aceptó su tara
+  normalmente después, lo que no sería posible si hubiera quedado en
+  un estado distinto de 1. No se forzó un caso real de `500` para esta
+  unidad (mismo mecanismo genérico ya probado en F2, no se repitió).
+- **Revisión de logs — alcance acotado, no una auditoría exhaustiva:**
+  se buscaron las claves de activación generadas durante las pruebas de
+  esta sesión en el log de stdout/stderr de la app local; no aparecen.
+  Esto cubre solo ese archivo y solo esas claves, no todo destino de log
+  posible ni toda clave posible generada en el futuro.
+- **Incidente de proceso, registrado por transparencia:** durante la
+  prueba de la carrera de dos taras concurrentes, la clave de
+  activación de la orden usada para esa prueba quedó impresa sin
+  enmascarar en la salida de un comando de la terminal durante esa
+  prueba manual (no en ningún archivo de reporte, documento versionado
+  ni mensaje al usuario). Se corrigió el enmascarado (patrón `jq` que
+  oculta el campo) para el resto de las pruebas de la sesión.
