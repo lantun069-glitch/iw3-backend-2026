@@ -107,3 +107,61 @@ Detalle completo: `docs/fuentes.md`.
      transcripción menciona noviembre de 2025, que corresponde a la
      cursada anterior reutilizada como material; no hay confirmación
      docente de la fecha 2026 todavía.)
+
+## Unidad: cierre explícito 2→3 (F4, primera unidad, TP15)
+
+Detalle completo: `docs/contrato-f4-cierre.md`, `docs/decisiones.md`
+sección "F4 — primera unidad".
+
+- **Qué:** `POST /api/v1/orders/{orderNumber}/cierre`, sin body. Cierra
+  la carga (transición 2→3) y, a partir de ese momento, cualquier
+  lectura de telemetría sobre esa orden se rechaza porque deja de estar
+  en estado 2 (reutiliza el chequeo ya existente de `registrarLectura`,
+  no se agregó un chequeo nuevo para esto). Requiere que la orden
+  exista, esté en estado 2, tenga `fechaActivacion` y al menos una
+  lectura aceptada (`fechaUltimaLectura` no nula); las dos últimas son
+  decisiones del equipo, no texto literal de la consigna.
+  `fechaFinCarga` queda igual a la última lectura válida recibida, no al
+  instante en que se llama a este endpoint.
+- **Por qué:** T1 pide explícitamente "un endpoint que permita cerrar la
+  orden bloqueando la recepción de nuevos datos de detalle... la orden
+  pasa a estado 3" (punto 4). Las dos precondiciones agregadas (activada,
+  con lecturas) evitan cerrar una carga que nunca llegó a ocurrir
+  realmente, lo que dejaría a la próxima unidad (conciliación, TP16-18)
+  sin ningún dato de masa cargada para calcular. Separar `fechaFinCarga`
+  (valor adoptado según la última lectura aceptada) del instante
+  administrativo de la llamada sigue el mismo criterio que ya se usó con
+  `fechaActivacion` vs. inicio real de carga en la unidad anterior: son
+  dos preguntas distintas ("¿qué valor adopta el sistema?" vs. "¿cuándo
+  se registró la transición?") — ninguna de las dos mide ni prueba el
+  instante físico real en que dejó de fluir producto.
+- **Cómo comprobarlo:** `curl` contra la app local y
+  `postman collection run` sobre
+  `postman/iw3-f4-cierre.postman_collection.json` (14 requests, 16
+  aserciones, 0 fallos) — ver evidencia completa en
+  `docs/contrato-f4-cierre.md`. Dos carreras de concurrencia con `curl`
+  en paralelo (cierre/cierre, cierre/lectura) confirmaron que el bloqueo
+  pesimista serializa ambos casos sin dejar un estado inconsistente.
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué `fechaFinCarga` no es simplemente "ahora" cuando se llama
+     al endpoint de cierre? (Porque la fuente describe el fin de carga
+     como el momento del último registro recibido, y se adoptó ese valor
+     en vez del momento en que un operador decide formalizar el cierre;
+     esos dos instantes pueden diferir, y el segundo de todas formas
+     queda auditado por separado en `HistorialEstado`. **Importante:**
+     `fechaFinCarga` es el valor que el sistema adopta a partir de la
+     última lectura aceptada, no una medición del instante físico real en
+     que dejó de fluir producto — eso no está probado ni se puede probar
+     con los datos disponibles.)
+  2. ¿Por qué un cierre repetido no tiene un mensaje de error propio tipo
+     "la orden ya está cerrada"? (Porque después del primer cierre
+     exitoso la orden ya está en estado 3, así que cae directamente en
+     el mismo chequeo "no está en estado 2" que cualquier otro estado
+     incompatible — no hace falta un camino especial para ese caso.)
+  3. ¿Cómo se sabe que una lectura concurrente con el cierre no puede
+     "colarse" después de que la orden ya pasó a estado 3? (El mismo
+     bloqueo `PESSIMISTIC_WRITE` sobre la fila de la orden que ya se usa
+     para tara/activación/lectura: quien pierde la carrera por el lock
+     relee el estado ya actualizado por quien la ganó, dentro de la misma
+     transacción — se verificó con dos `curl` en paralelo, no es solo un
+     argumento teórico.)

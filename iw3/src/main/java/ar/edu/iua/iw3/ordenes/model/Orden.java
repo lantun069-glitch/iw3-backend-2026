@@ -145,4 +145,15 @@ public class Orden {
 	 */
 	@Column
 	private LocalDateTime fechaInicioCarga;
+
+	/**
+	 * Fin de carga (F4, TP15): fijado por el cierre explicito 2->3 a partir
+	 * de fechaUltimaLectura (la ultima lectura VALIDA recibida), no del
+	 * instante en que se invoca el endpoint de cierre - DECISION DEL
+	 * EQUIPO, ver docs/contrato-f4-cierre.md. El momento real de esa
+	 * invocacion queda igualmente auditado como fechaHora del
+	 * HistorialEstado de la transicion a 3. Null hasta el cierre.
+	 */
+	@Column
+	private LocalDateTime fechaFinCarga;
 }

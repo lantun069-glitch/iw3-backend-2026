@@ -708,6 +708,79 @@ TP14. **No se encontró contradicción** entre cerrar F3 sin TP14 y el
 plan de fases vigente: un requisito futuro (TP14, en F6) no es
 dependencia de F3 y no impide cerrarla.
 
+## F4 — primera unidad: cierre explícito 2→3
+
+**Alcance:** únicamente TP15 (endpoint explícito de cierre, transición
+2→3, bloqueo de lecturas posteriores). No incluye pesaje final ni
+conciliación (TP16–TP18, siguiente unidad de F4). Rama
+`feature/f4-cierre-conciliacion`, creada desde el HEAD `ce82a50` (cierre
+de F3). Árbol de trabajo limpio al crear la rama.
+
+**Resumen de decisiones:** precondición `estado==2`, **más** dos
+precondiciones adicionales de decisión del equipo —
+`fechaActivacion != null` y `fechaUltimaLectura != null` (al menos una
+lectura aceptada) — ninguna de las dos es una exigencia textual de T1
+para este endpoint específico (ver `docs/contrato-f4-cierre.md` para la
+justificación completa). El cierre repetido se rechaza por el mismo
+chequeo de `estado==2` (tras el primer cierre la orden queda en 3), sin
+necesidad de una excepción separada. `fechaFinCarga` se fija igual a
+`fechaUltimaLectura` (última lectura VÁLIDA): es el valor que el
+sistema **adopta** para el fin de carga, no una medición del instante
+físico real en que dejó de fluir producto (puede haber una brecha no
+medida entre ambos) — decisión explícita de esta unidad, distinta del
+instante real de la llamada al endpoint, que se audita por separado
+como `fechaHora` del `HistorialEstado` de la transición a 3. Mismo bloqueo
+`PESSIMISTIC_WRITE` (`findByOrderNumberForUpdate`) y transacción con
+rollback que tara/activación/lectura. Se reutilizó `InvalidStateException`
+(ya existente desde F3) para las tres precondiciones de 409, sin crear
+una excepción de dominio nueva.
+
+**Evidencia — HTTP real contra la app corriendo (`mysqldev`, MySQL ya
+levantado por una sesión anterior):** cierre sobre orden inexistente
+(404); cierre en estado 1 (409); cierre en estado 2 sin activar (409,
+mensaje distinto); cierre activada sin lecturas aceptadas (409, mensaje
+distinto); cierre válido tras una lectura aceptada (200, `estado=3`,
+`fechaFinCarga` idéntico al `fechaUltimaLectura` de la respuesta de esa
+lectura); cierre repetido (409, estado actual 3); lectura enviada
+después del cierre (409, snapshot/detalle sin cambios); cierre sin
+token (401). Dos carreras de concurrencia con `curl` en paralelo:
+cierre/cierre sobre la misma orden (una `200`, otra `409`, sin doble
+transición observada) y cierre/lectura sobre la misma orden (en la
+corrida observada el cierre ganó, la lectura concurrente fue rechazada
+con 409; no se forzó el orden contrario). Confirmado además con
+`postman collection run` sobre
+`postman/iw3-f4-cierre.postman_collection.json`: **14 requests, 16
+aserciones, 0 fallos** (no ejercita las carreras concurrentes, mismo
+límite documentado que las colecciones de F3). `GET /v3/api-docs`
+confirma el path nuevo y el esquema `CierreResponse`.
+
+**Verificación directa de BD, ejecutada por el usuario (sin acceso de
+esta sesión a cliente MySQL ni `docker exec`):** para las órdenes
+940556/950632/960632 (las tres cerradas en la sesión de `curl` de esta
+unidad) — una sola fila de `historial_estados` con `estado_nuevo=3` por
+orden (una única transición, sin duplicados) y una sola fila de
+`detalles_carga` de 4000 kg por orden, con `fechaFinCarga` de `ordenes`
+coincidente con la `fecha_lectura` de esa fila en las tres. **Esto
+acota qué quedó confirmado:** que `fechaFinCarga` toma efectivamente el
+valor de la última lectura aceptada, tal como implementado — **no** que
+ese valor coincida con el instante físico real de fin de flujo (ver
+corrección arriba). La consulta detectó un error de nomenclatura de
+columna en la versión anterior de `docs/contrato-f4-cierre.md`
+(`usuario_o_proceso` en vez de la columna real `usuariooproceso`, mismo
+hallazgo ya registrado desde F2), ya corregido ahí. No se verificó en
+esta ronda el contenido de `usuariooproceso` ni la relación entre
+`fecha_hora` y el instante real de la llamada HTTP contra un valor
+esperado puntual — queda igual que antes, inferido del código.
+
+**Archivos nuevos/modificados:**
+- `model/Orden.java` (`fechaFinCarga`, nuevo).
+- `controllers/dto/CierreResponse.java` (nuevo).
+- `business/IOrdenBusiness.java`/`OrdenBusiness.java` (`cerrarCarga`).
+- `controllers/OrdenRestController.java` (endpoint `/cierre`, OpenAPI).
+- `postman/iw3-f4-cierre.postman_collection.json` (nuevo).
+- `docs/contrato-f4-cierre.md` (nuevo), `docs/requisitos.md`, este
+  archivo.
+
 **Evidencia de cierre — tara y activación (TP08/TP09, primera
 unidad):** colección `postman/iw3-f3-tara-activacion.postman_collection.json`
 con `postman collection run --iteration-count 2` (dos corridas

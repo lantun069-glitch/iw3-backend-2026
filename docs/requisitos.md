@@ -18,14 +18,17 @@ TP10 a TP13 están **verificados** (TP13 puntualmente para las órdenes
 usuario, no generalizado a escenarios no probados) para la segunda
 unidad de F3 (telemetría), aprobada y publicada en la misma rama; TP14
 sigue **pendiente**,
-confirmado explícitamente no adelantado en esta unidad; TP20 y TP21
-están **en curso** (cubren la transición de creación y la de tara, no
-el resto del ciclo de vida); TP23 y TP24 (OpenAPI y Postman) están **en
-curso**, verificados para recepción+tara+activación+lecturas y
-pendientes de ampliar con los endpoints de F4; el resto de los
-requisitos funcionales (TP01, TP15–TP19, TP22, TP25 en adelante) sigue
-**pendiente**, porque las fases que les corresponden (F4 en adelante, o
-el cierre del segundo parcial para TP22) todavía no empezaron. TP36, de
+confirmado explícitamente no adelantado en esta unidad; TP15 está
+**verificado** para la primera unidad de F4 (cierre explícito 2→3, rama
+`feature/f4-cierre-conciliacion`, sin publicar todavía); TP20 y TP21
+están **en curso** (cubren recepción, tara, activación, primera lectura
+y ahora cierre; el pesaje final de TP16 sigue pendiente); TP23 y TP24
+(OpenAPI y Postman) están **en curso**, verificados para
+recepción+tara+activación+lecturas+cierre y pendientes de ampliar con
+pesaje final/conciliación; el resto de los requisitos funcionales
+(TP01, TP16–TP19, TP22, TP25 en adelante) sigue **pendiente**, porque
+las fases que les corresponden (resto de F4 en adelante, o el cierre
+del segundo parcial para TP22) todavía no empezaron. TP36, de
 preparación
 para la defensa, está en curso; todavía no se practicaron las preguntas.
 De las filas de equipo/infraestructura (EQ), EQ01 y EQ02 están en curso
@@ -403,7 +406,48 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F4.
 - Criterio de aceptación: una lectura enviada después del cierre no
   modifica snapshot ni detalle, y devuelve un error explícito.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado**, para el alcance de esta unidad (primera de
+  F4). Implementación: `POST /api/v1/orders/{orderNumber}/cierre`
+  (`OrdenRestController.cerrar`, `OrdenBusiness.cerrarCarga`), sin body.
+  Precondiciones: orden existente (404 si no), en estado 2 (409 si no,
+  cubre también el cierre repetido), activada (409 si no) y con al
+  menos una lectura aceptada (409 si no) — las dos últimas son
+  **DECISIÓN DEL EQUIPO**, no exigidas textualmente por T1 para este
+  endpoint (ver `docs/contrato-f4-cierre.md`). `fechaFinCarga` se fija
+  igual a `fechaUltimaLectura`, no al instante de la llamada: es el
+  valor que el sistema **adopta** como fin de carga a partir de la
+  última lectura aceptada, **no una medición del instante físico real**
+  en que dejó de fluir producto (puede haber una brecha no medida entre
+  ambos). El instante real de la llamada queda auditado por separado,
+  como `fechaHora` del `HistorialEstado` de la transición a 3
+  (`estadoNuevo=3`, actor autenticado). Mismo
+  bloqueo pesimista (`findByOrderNumberForUpdate`) y transacción con
+  rollback que tara/activación/lectura. Evidencia: probado con `curl`
+  contra la app local (perfil `mysqldev`, MySQL ya levantado) recorriendo
+  el camino feliz y los cuatro rechazos (404, 409×3), más lectura
+  posterior al cierre (409, sin cambios en snapshot/detalle) y dos
+  carreras de concurrencia (`curl` en paralelo: cierre/cierre → una
+  `200`/una `409`; cierre/lectura → en la corrida observada el cierre
+  ganó, la lectura concurrente fue rechazada). Confirmado también con
+  `postman collection run` sobre
+  `postman/iw3-f4-cierre.postman_collection.json`: 14 requests, 16
+  aserciones, 0 fallos (no ejercita las carreras concurrentes, mismo
+  límite que las colecciones de F3). `GET /v3/api-docs` confirma el path
+  nuevo y el esquema `CierreResponse`. **Confirmado además por consulta
+  directa de BD, ejecutada por el usuario** (sin acceso de esta sesión a
+  cliente MySQL ni `docker exec`): para las órdenes 940556/950632/960632
+  (las tres cerradas en esta sesión), una sola fila de `HistorialEstado`
+  con `estado_nuevo=3` por orden (una única transición a 3) y una sola
+  fila de `detalles_carga` de 4000 kg por orden, con `fechaFinCarga`
+  coincidente con la `fecha_lectura` de esa fila en las tres — **acota
+  qué quedó verificado: confirma que `fechaFinCarga` toma el valor de la
+  última lectura aceptada, no que ese valor coincida con el instante
+  físico real de fin de flujo** (ver corrección de precisión arriba).
+  Esta consulta detectó además un error de nomenclatura de columna en
+  `docs/contrato-f4-cierre.md` (`usuario_o_proceso` escrito donde la
+  columna real es `usuariooproceso`, mismo hallazgo ya registrado desde
+  F2), ya corregido ahí. Detalle completo en
+  `docs/contrato-f4-cierre.md`.
 
 ### TP16 — Pesaje final 3→4 con conciliación en la misma respuesta
 - Descripción: un servicio recibe el pesaje final, cambia la orden a
@@ -472,17 +516,20 @@ y descarte de lecturas: `docs/fuentes.md`.
   timestamp; documentar qué evento exacto dispara cada marca (ej.: no
   igualar automáticamente "tara" con "inicio real de carga", porque T1
   los describe como pasos distintos).
-- Estado: en curso — `fechaRecepcion` (recepción/creación) y `fechaTara`
-  (pesaje inicial) están verificados; `fechaActivacion` también está
-  verificado pero **no** se cuenta como "inicio de carga" (decisión
-  explícita de esta unidad, ver `docs/decisiones.md`, sección F3:
-  `fechaActivacion` es el instante en que la API acepta la clave, su
-  relación con el inicio real de carga se resuelve en la próxima unidad
-  de F3); fin de carga y pesaje final son de F4, todavía pendientes.
-  Implementación: `Orden.fechaRecepcion`/`fechaTara`/`fechaActivacion`,
-  generadas con zona explícita `America/Argentina/Cordoba` (ver
-  `docs/decisiones.md`). Evidencia: timestamp persistido y devuelto en
-  cada operación (recepción, tara, activación).
+- Estado: en curso — `fechaRecepcion` (recepción/creación), `fechaTara`
+  (pesaje inicial), `fechaActivacion`, `fechaInicioCarga` (primera
+  lectura aceptada, ver TP10-TP13) y, desde esta unidad, `fechaFinCarga`
+  (cierre explícito 2→3, TP15) están verificados. `fechaFinCarga` se
+  fija igual a `fechaUltimaLectura` (última lectura VÁLIDA), no al
+  instante de la llamada al endpoint de cierre — **DECISIÓN DEL EQUIPO**
+  explícita de esta unidad, ver `docs/contrato-f4-cierre.md`; el instante
+  real de esa llamada se audita por separado en `HistorialEstado`. Solo
+  el pesaje final queda pendiente (TP16, resto de F4).
+  Implementación: `Orden.fechaRecepcion`/`fechaTara`/`fechaActivacion`/
+  `fechaInicioCarga`/`fechaFinCarga`, generadas con zona explícita
+  `America/Argentina/Cordoba` (ver `docs/decisiones.md`). Evidencia:
+  timestamp persistido y devuelto en cada operación (recepción, tara,
+  activación, lectura, cierre).
 
 ### TP21 — Transiciones de estado unidireccionales y auditadas
 - Descripción: los estados avanzan 1→2→3→4 sin saltos ni retrocesos; cada
@@ -504,19 +551,24 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F4.
 - Criterio de aceptación: un intento de salto o retroceso de estado se
   rechaza; se puede consultar la secuencia de transiciones de una orden.
-- Estado: en curso — la transición de creación (ninguno→1) y la de tara
-  (1→2) están verificadas, incluyendo el rechazo de tara repetida (409);
-  el rechazo de saltos/retrocesos contra estados 3/4 no se puede probar
-  todavía porque ningún endpoint implementado los alcanza, y las
-  transiciones de F4 siguen pendientes. La activación **no** agrega fila
-  en `HistorialEstado` (decisión del equipo: no cambia `estado`, ver
-  `docs/decisiones.md`, sección F3). Implementación:
+- Estado: en curso — la transición de creación (ninguno→1), la de tara
+  (1→2) y, desde esta unidad, el cierre (2→3, TP15) están verificadas,
+  incluyendo el rechazo de tara repetida y de cierre repetido (409); el
+  rechazo de saltos/retrocesos contra estado 4 no se puede probar
+  todavía porque el pesaje final (TP16) sigue pendiente. La activación
+  **no** agrega fila en `HistorialEstado` (decisión del equipo: no
+  cambia `estado`, ver `docs/decisiones.md`, sección F3). Implementación:
   `ordenes/model/HistorialEstado.java` (no es la única estructura
   posible, es la decisión del equipo para implementarlo). Evidencia:
-  cada recepción válida genera una fila con
-  `estadoNuevo=1`, cada tara válida genera una fila con `estadoNuevo=2`,
-  `usuarioOProceso` = usuario autenticado (nunca del
-  JSON), misma fecha/hora que `Orden.fechaRecepcion`.
+  cada recepción válida genera una fila con `estadoNuevo=1`, cada tara
+  válida genera una fila con `estadoNuevo=2`, cada cierre válido genera
+  una fila con `estadoNuevo=3` cuya `fechaHora` es el instante real de
+  la llamada al cierre (distinto de `fechaFinCarga` de la orden, ver
+  TP15/`docs/contrato-f4-cierre.md`); `usuarioOProceso` = usuario
+  autenticado (nunca del JSON) en los tres casos. **No verificado por
+  lectura directa de la fila nueva** (`estadoNuevo=3`) en esta sesión,
+  solo por inferencia de código y ausencia de error HTTP — ver límite en
+  `docs/contrato-f4-cierre.md`.
 
 ### TP22 — Sin interfaz gráfica para el segundo parcial
 - Descripción: los puntos 1 a 5 se entregan como API, sin ninguna

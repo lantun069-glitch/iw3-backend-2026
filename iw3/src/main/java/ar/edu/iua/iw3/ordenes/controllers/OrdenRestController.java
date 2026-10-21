@@ -26,6 +26,7 @@ import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
 import ar.edu.iua.iw3.ordenes.business.LecturaResultado;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionResponse;
+import ar.edu.iua.iw3.ordenes.controllers.dto.CierreResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
@@ -47,7 +48,9 @@ import jakarta.validation.Valid;
 /**
  * F2 cubrio la recepcion de una orden (recibir()). F3, primera unidad,
  * agrega tara/activacion (registrarTara()/activar()); segunda unidad,
- * telemetria (registrarLectura()). No expone CRUD/consulta para Orden
+ * telemetria (registrarLectura()). F4 agrega el cierre explicito 2->3
+ * (cerrar(), TP15); pesaje final y conciliacion (TP16-TP18) todavia no.
+ * No expone CRUD/consulta para Orden
  * ni para sus referencias (Camion/Chofer/Cliente/Producto); eso no
  * esta pedido para estas unidades. No hay endpoint de consulta del
  * snapshot/historico: la respuesta de cada lectura ya devuelve el
@@ -249,6 +252,48 @@ public class OrdenRestController extends BaseRestController {
 					resultado.getMotivoDescarte(), orden.getMasaAcumuladaKg(), orden.getDensidad(),
 					orden.getTemperaturaC(), orden.getCaudalKgH(), orden.getFechaUltimaLectura(),
 					orden.getFechaInicioCarga());
+			return new ResponseEntity<>(body, HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (InvalidStateException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
+		} catch (BusinessException e) {
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Operation(summary = "Cerrar la carga (estado 2 -> 3)",
+			description = "Cierra explicitamente la carga: bloquea nuevas lecturas de detalle a partir de "
+					+ "este momento (registrarLectura rechaza con 409 cualquier llamada posterior, porque la "
+					+ "orden deja de estar en estado 2). Requiere que la orden exista, este en estado 2, ya "
+					+ "tenga fechaActivacion y al menos una lectura aceptada (decisiones del equipo adicionales "
+					+ "al requisito de la fuente). No tiene body. fechaFinCarga en la respuesta es la ultima "
+					+ "lectura valida recibida, no el instante de esta llamada. No hay cierre automatico por "
+					+ "alcanzar el preset. Requiere autenticacion JWT.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Carga cerrada, orden en estado 3.",
+					content = @Content(schema = @Schema(implementation = CierreResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"estado\":3,\"fechaFinCarga\":\"2026-10-21T10:07:00.845232\"}"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 2 (incluye cierre repetido), no fue activada, o no tiene lecturas aceptadas.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = {
+							@ExampleObject(name = "Estado incompatible", value = "{\"message\":\"La orden orderNumber=900001 no esta en estado 2 (estado actual: 1)\",\"code\":409,\"devInfo\":\"No stack trace\"}"),
+							@ExampleObject(name = "Sin activar", value = "{\"message\":\"La orden orderNumber=900001 todavia no fue activada\",\"code\":409,\"devInfo\":\"No stack trace\"}"),
+							@ExampleObject(name = "Sin lecturas aceptadas", value = "{\"message\":\"La orden orderNumber=900001 no tiene lecturas aceptadas, no se puede cerrar\",\"code\":409,\"devInfo\":\"No stack trace\"}")
+					})),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@PostMapping(value = "/{orderNumber}/cierre", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<?> cerrar(@PathVariable Integer orderNumber) {
+		String actor = getUserLogged().getUsername();
+		try {
+			Orden orden = ordenBusiness.cerrarCarga(orderNumber, actor);
+			CierreResponse body = new CierreResponse(orden.getOrderNumber(), orden.getEstado(),
+					orden.getFechaFinCarga());
 			return new ResponseEntity<>(body, HttpStatus.OK);
 		} catch (NotFoundException e) {
 			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);

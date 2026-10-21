@@ -57,4 +57,21 @@ public interface IOrdenBusiness {
 	public LecturaResultado registrarLectura(Integer orderNumber, BigDecimal masaAcumuladaKg, BigDecimal densidad,
 			BigDecimal temperaturaC, BigDecimal caudalKgH)
 			throws NotFoundException, InvalidStateException, BusinessException;
+
+	/**
+	 * Cierre explicito de carga, transicion 2-&gt;3 (TP15). Requiere que la
+	 * orden exista, este en estado 2, ya tenga fechaActivacion y al menos
+	 * una lectura aceptada (fechaUltimaLectura no nula) - las dos ultimas
+	 * son precondiciones adicionales de decision del equipo, ver
+	 * docs/contrato-f4-cierre.md. Un cierre repetido se rechaza por el
+	 * mismo chequeo de estado (la orden ya quedo en 3). fechaFinCarga se
+	 * fija igual a fechaUltimaLectura, no al instante de esta llamada; ese
+	 * instante real se audita por separado como fechaHora del
+	 * HistorialEstado. Misma proteccion de concurrencia
+	 * (PESSIMISTIC_WRITE) que registrarTara/activar/registrarLectura: no
+	 * bloquea nuevas lecturas por si sola, el cierre si cambia el estado
+	 * de forma que registrarLectura las rechaza despues.
+	 */
+	public Orden cerrarCarga(Integer orderNumber, String actor)
+			throws NotFoundException, InvalidStateException, BusinessException;
 }

@@ -303,6 +303,62 @@ public class OrdenBusiness implements IOrdenBusiness {
 		}
 	}
 
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public Orden cerrarCarga(Integer orderNumber, String actor)
+			throws NotFoundException, InvalidStateException, BusinessException {
+		try {
+			// Mismo bloqueo que registrarTara/activar/registrarLectura: una
+			// vez que este cierre confirma y libera el lock, cualquier
+			// lectura o cierre concurrente que esperaba el lock relee la
+			// orden ya en estado 3 y se rechaza por el chequeo de estado de
+			// su propia operacion (registrarLectura o este mismo metodo).
+			Orden orden = ordenDAO.findByOrderNumberForUpdate(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+
+			if (orden.getEstado() != 2) {
+				// Cubre tambien el cierre repetido: tras el primer cierre
+				// exitoso la orden queda en estado 3 y esta misma rama lo
+				// rechaza.
+				throw InvalidStateException.builder().message("La orden orderNumber=" + orderNumber
+						+ " no esta en estado 2 (estado actual: " + orden.getEstado() + ")").build();
+			}
+			if (orden.getFechaActivacion() == null) {
+				throw InvalidStateException.builder()
+						.message("La orden orderNumber=" + orderNumber + " todavia no fue activada").build();
+			}
+			if (orden.getFechaUltimaLectura() == null) {
+				throw InvalidStateException.builder().message(
+						"La orden orderNumber=" + orderNumber + " no tiene lecturas aceptadas, no se puede cerrar")
+						.build();
+			}
+
+			// Hora efectiva del cierre (instante real de esta llamada), para
+			// el historial de auditoria. fechaFinCarga usa un valor
+			// distinto: ver Javadoc de IOrdenBusiness.cerrarCarga.
+			LocalDateTime ahora = LocalDateTime.now(ZONA_RECEPCION).truncatedTo(ChronoUnit.MICROS);
+
+			orden.setFechaFinCarga(orden.getFechaUltimaLectura());
+			orden.setEstado(3);
+			orden = ordenDAO.save(orden);
+
+			HistorialEstado historial = new HistorialEstado();
+			historial.setOrden(orden);
+			historial.setEstadoNuevo(3);
+			historial.setFechaHora(ahora);
+			historial.setUsuarioOProceso(actor);
+			historialDAO.save(historial);
+
+			return orden;
+		} catch (NotFoundException | InvalidStateException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
+	}
+
 	private String causaMasEspecifica(Throwable e) {
 		Throwable t = e;
 		while (t.getCause() != null && t.getCause() != t) {

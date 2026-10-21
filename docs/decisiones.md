@@ -674,3 +674,91 @@ implementar.
   esperadas, y `fechaInicioCarga`/`fechaUltimaLectura` del snapshot
   coincidentes con la `fecha_lectura` de la primera y la última fila de
   detalle de cada orden. Ningún detalle de una orden apareció bajo otra.
+
+## F4 — primera unidad: cierre explícito 2→3 (TP15)
+
+Detalle completo del contrato en `docs/contrato-f4-cierre.md`. Aquí las
+decisiones y su origen.
+
+- **Dos precondiciones adicionales a `estado==2` (DECISIÓN DEL EQUIPO,
+  no cita literal):** T1 solo exige, para este endpoint, "un endpoint
+  que permita cerrar la orden bloqueando la recepción de nuevos datos de
+  detalle... la orden pasa a estado 3." No menciona activación ni
+  lecturas previas como condición del cierre. Se agregaron
+  `fechaActivacion != null` y `fechaUltimaLectura != null` (al menos una
+  lectura aceptada) porque cerrar una carga que nunca se activó o que
+  nunca recibió ningún dato real no corresponde al circuito de carga que
+  T1 describe, y produciría una conciliación sin masa cargada que
+  calcular en la próxima unidad (TP16-TP18). Es una interpretación de
+  coherencia del equipo, igual criterio que la precondición de
+  activación agregada a `registrarLectura` en la unidad anterior — no un
+  requisito confirmado por el texto.
+- **Cierre repetido sin excepción nueva:** se reutiliza el mismo chequeo
+  `estado==2` que las demás precondiciones: tras el primer cierre exitoso
+  la orden queda en estado 3, así que un segundo intento cae en la misma
+  rama de rechazo que cualquier otro estado incompatible. No hay un
+  mensaje de error distinto para "ya estaba cerrada".
+- **`fechaFinCarga` = `fechaUltimaLectura`, no el instante de la llamada
+  (DECISIÓN DEL EQUIPO):** interpretación de "fecha y hora de fin de
+  carga" (TP20) como el valor que el sistema **adopta** a partir de la
+  última lectura válida recibida, en vez del momento administrativo en
+  que alguien decide cerrar la orden — ambos pueden diferir. **Corrección
+  de precisión (no cambia el código, cambia cómo se describe):**
+  `fechaFinCarga` es el dato que el sistema adopta según la última
+  lectura aceptada, **no una medición ni una prueba del instante físico
+  real** en que dejó de fluir producto — puede existir una brecha no
+  medida entre ambos (latencia de red, frecuencia de muestreo), y esta
+  unidad no tiene forma de acotarla. El instante real de la llamada al
+  endpoint se audita de todas formas, pero en otro campo: `fechaHora`
+  del `HistorialEstado` de la transición a 3. Mismo truncado a
+  microsegundos (`ChronoUnit.MICROS`) que `fechaActivacion`/
+  `fechaUltimaLectura`, por el mismo motivo de precisión de columna
+  `datetime(6)`.
+- **Misma concurrencia que tara/activación/lectura:** `cerrarCarga` usa
+  `findByOrderNumberForUpdate` (`PESSIMISTIC_WRITE`) dentro de la misma
+  transacción que el chequeo de precondiciones y la escritura. No se
+  agrega ningún mecanismo nuevo (sin `@Version`).
+- **Verificado con `curl` en paralelo (dos carreras, no una prueba
+  exhaustiva de ambos órdenes posibles):** cierre/cierre sobre la misma
+  orden → una `200` (estado 3, `fechaFinCarga` fijado), la otra `409`
+  ("no está en estado 2, estado actual: 3"); cierre/lectura sobre la
+  misma orden → en la corrida observada el cierre ganó la carrera (`200`)
+  y la lectura concurrente fue rechazada (`409`); una lectura posterior
+  confirmó que la orden quedó en estado 3. No se forzó deliberadamente el
+  orden contrario (lectura ganando antes de que el cierre tome el lock).
+- **Verificado con `curl` secuencial contra la app local (`mysqldev`,
+  MySQL ya levantado por una sesión anterior) y luego con
+  `postman collection run` sobre
+  `postman/iw3-f4-cierre.postman_collection.json` (14 requests, 16
+  aserciones, 0 fallos):** cierre sobre orden inexistente (404); cierre
+  en estado 1 (409); cierre en estado 2 sin activar (409, mensaje
+  distinto); cierre activada sin lecturas aceptadas (409, mensaje
+  distinto); cierre válido (200, `fechaFinCarga` idéntico al
+  `fechaUltimaLectura` de la lectura previa); cierre repetido (409,
+  estado actual 3); lectura enviada después del cierre (409, snapshot y
+  detalle sin cambios); cierre sin token (401).
+- **Verificado por lectura directa de BD, ejecutada por el usuario (no
+  por HTTP):** sin acceso a `docker exec`/cliente `mysql` en esta
+  sesión, la consulta puntual quedó pendiente hasta que el usuario la
+  corrió directamente y confirmó el resultado. **Corrección de columna
+  detectada al ejecutarla:** el nombre real de la columna del actor en
+  `historial_estados` es `usuariooproceso` (sin guiones bajos, dos
+  mayúsculas consecutivas en `usuarioOProceso`), no `usuario_o_proceso`
+  como se había escrito al redactar la consulta de esta unidad —
+  corregido en `docs/contrato-f4-cierre.md`. El mismo hallazgo de
+  nomenclatura ya estaba registrado desde F2 para la misma tabla/columna
+  (ver sección F2 de este documento); no se había aplicado al escribir
+  la consulta de F4. **Resultado, verificado puntualmente para las
+  órdenes 940556/950632/960632 (las tres cerradas en la sesión de
+  implementación con `curl`), sin generalizar a órdenes no probadas:**
+  una sola fila con `estado_nuevo=3` por orden (una única transición a
+  3, sin duplicados) y una sola fila de `detalles_carga` de 4000 kg por
+  orden (coincide con la única lectura aceptada de cada una);
+  `fechaFinCarga` de `ordenes` coincide con la `fecha_lectura` de esa
+  fila en las tres órdenes. Esto confirma que `fechaFinCarga` toma
+  efectivamente el valor de la última lectura aceptada, tal como
+  implementado — **no confirma, ni puede confirmar, el instante físico
+  real de fin de flujo** (ver corrección de precisión arriba). No se
+  verificó en esta ronda el contenido exacto de `usuariooproceso` ni la
+  relación entre `fecha_hora` de esa fila y el instante real de la
+  llamada HTTP contra un valor esperado puntual.
