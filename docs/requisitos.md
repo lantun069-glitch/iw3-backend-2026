@@ -7,10 +7,16 @@ entenderse.
 
 Estados permitidos: **pendiente**, **en curso**, **implementado sin
 verificar**, **verificado**, **bloqueado**, **no aplicable con
-justificación**. Los requisitos funcionales están en **pendiente**: esta etapa es
-inventario y documentación, no implementación. TP36, de preparación
-para la defensa, está en curso; todavía no se practicaron las preguntas. Las filas de equipo/infraestructura (EQ) sí tienen
-avance real.
+justificación**. Estado real a esta fecha (ver cada fila para el detalle
+y la evidencia, esto es solo un resumen, no reemplaza leerlas): TP02 a
+TP07 están **verificados** para la unidad de recepción de orden (F2);
+TP20 y TP21 están **en curso** (solo cubren la transición de creación,
+no el resto del ciclo de vida); el resto de los requisitos funcionales
+(TP01, TP08 en adelante) sigue **pendiente**, porque las fases que les
+corresponden (F3 en adelante) todavía no empezaron. TP36, de preparación
+para la defensa, está en curso; todavía no se practicaron las preguntas.
+De las filas de equipo/infraestructura (EQ), EQ01 y EQ02 están en curso
+y EQ03 está verificado.
 
 Fuentes citadas: **T1** = transcripción "Lectura de la consigna del
 trabajo integrador" (texto completo leído, cuaderno de materia,
@@ -48,7 +54,12 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2.
 - Criterio de aceptación: un POST con esos 7 campos crea una orden en
   estado 1; falta de un campo obligatorio devuelve error.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: verificado (unidad de recepción únicamente, sin consulta ni
+  actualización posterior). Implementación: `ordenes/controllers/OrdenRestController.java`,
+  `ordenes/business/OrdenBusiness.java`, `ordenes/model/Orden.java`.
+  Evidencia: `POST /api/v1/orders` con los 7 datos → 201, estado 1,
+  verificado contra la base real en `iw3-backend-sanitized`
+  (`feature/f2-recepcion-ordenes`).
 
 ### TP03 — Sincronización por código externo
 - Descripción: las entidades recibidas de sistemas externos se
@@ -61,24 +72,47 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2.
 - Criterio de aceptación: mismo código externo no duplica entidad; un
   cambio de dato (ej. patente) se refleja en una segunda recepción.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: verificado. Implementación: `OrdenBusiness.sincronizar*()`.
+  Evidencia: segunda orden con los mismos 4 `externalCode` reutilizó las
+  mismas filas (sin duplicar) y actualizó `patente`/`capacidadKg`/
+  `apellido` (obligatorios); los opcionales omitidos (`documento`,
+  `contacto`, `descripcion` de producto) conservaron su valor anterior
+  en vez de quedar en null — semántica documentada en
+  `docs/contrato-f2-recepcion.md`.
 
-### TP04 — Camión y cisternas
-- Descripción: camión con patente, descripción opcional y una lista de
-  cisternas, cada una con nombre/número y capacidad; la capacidad total
-  se calcula, no se almacena.
+### TP04 — Camión como unidad de carga completa (capacidadKg directo)
+- Descripción vigente: camión con patente obligatoria, descripción
+  opcional y `capacidadKg` como campo directo del camión. El camión
+  completo **es** la unidad de carga ("cisterna" = el camión); no hay
+  entidad `Cisterna`, ni compartimentos, ni una regla de cantidad de
+  cisternas que validar.
 - Alcance: segundo parcial y final.
-- Fuente: T1, anexo — "pretendo mínimo que tenga un camión, una patente,
-  una descripción... y [una lista de cisternas]... puede tener varias...
-  a cada [cisterna] tengo que darle al menos un nombre y un número... y
-  la capacidad... el total no se almacena." La palabra transcripta es
-  "sistema"; INTERPRETACIÓN DEL EQUIPO: por contexto es "cisterna" (ver
-  `docs/fuentes.md`).
+- Fuente vigente: aclaración del profesor transmitida por el equipo,
+  **posterior** a la lectura de T1 citada abajo — detalle completo en
+  `docs/decisiones.md`, sección F2.
+- **Antecedente superado (lectura original de T1, anexo, que esta
+  aclaración reemplaza — se conserva la cita tal cual se leyó, sin
+  editarla, para que quede trazable el cambio):** "pretendo mínimo que
+  tenga un camión, una patente, una descripción... y [una lista de
+  cisternas]... puede tener varias... a cada [cisterna] tengo que darle
+  al menos un nombre y un número... y la capacidad... el total no se
+  almacena." La palabra transcripta es "sistema"; INTERPRETACIÓN DEL
+  EQUIPO en su momento: por contexto es "cisterna" (ver
+  `docs/fuentes.md`). Esa lectura suponía una lista de cisternas con
+  nombre/número y capacidad propia, con el total del camión calculado a
+  partir de ellas; el modelo implementado ya no sigue esa lectura.
 - Fase prevista: F2.
-- Criterio de aceptación: un camión con 2 cisternas (ej. 10000+5000)
-  devuelve capacidad total 15000 calculada en el momento, no leída de una
-  columna.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Criterio de aceptación vigente: un `POST` con `camion.capacidadKg`
+  crea o actualiza el camión con ese valor como campo propio (no hay
+  cálculo de total ni colección de cisternas que sumar); una segunda
+  recepción con el mismo `externalCode` y un `capacidadKg` distinto
+  actualiza el valor ya guardado.
+- Estado: verificado (según el modelo vigente, no el antecedente
+  superado). Implementación: `ordenes/model/Camion.java`,
+  `@Size(max=20)` en `patente` y `@Size(max=255)` en `descripcion` del
+  DTO, alineados con las columnas. Evidencia: POST con
+  `camion.capacidadKg` persistido y actualizado en una segunda recepción
+  con el mismo `externalCode`.
 
 ### TP05 — Chofer, cliente y producto: atributos mínimos
 - Descripción: chofer (nombre+apellido obligatorios, documento
@@ -92,7 +126,10 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2.
 - Criterio de aceptación: crear con los opcionales ausentes funciona;
   falta de un obligatorio rechaza con error.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: verificado. Implementación: `ordenes/model/{Chofer,Cliente,Producto}.java`,
+  validación `@NotBlank`/`@Valid` en `OrdenRecepcionRequest`. Evidencia:
+  creación con opcionales ausentes → 201; falta de `camion.patente`
+  (obligatorio) → 400 con el detalle del campo rechazado.
 
 ### TP06 — Número de orden entero único, distinto del ID interno
 - Descripción: el número de orden es un entero único recibido
@@ -109,7 +146,14 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: dos recepciones con el mismo número de orden no
   crean dos filas distintas; el ID interno nunca se expone como "número
   de orden" en la API.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: verificado, incluido el caso de colisión concurrente (no solo
+  el camino secuencial). Implementación: `Orden.orderNumber` (columna
+  `order_number`, restricción única con nombre explícito
+  `uk_orden_order_number`), `OrdenRepository.existsByOrderNumber`.
+  Evidencia: con `orderNumber` repetido → 409 sin crear fila nueva; dos
+  solicitudes simultáneas con el mismo `orderNumber` nuevo → una 201 y
+  otra 409, sin fila duplicada. El id interno (`id`) y `orderNumber`
+  viajan como campos separados en la respuesta.
 
 ### TP07 — Creación en estado 1
 - Descripción: toda orden recibida se crea en estado 1 (pendiente de
@@ -120,7 +164,10 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2.
 - Criterio de aceptación: el JSON de entrada no puede forzar otro estado
   inicial distinto de 1.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: verificado. Implementación: `OrdenRecepcionRequest` no tiene
+  campo `estado`; `OrdenBusiness.recibirOrden` lo fija en 1 siempre.
+  Evidencia: el campo no existe en el contrato de entrada, no hay forma
+  de enviarlo.
 
 ### TP08 — Tara, timestamp y clave de activación (transición 1→2)
 - Descripción: al registrar la tara (pesaje inicial) se genera una clave
@@ -303,22 +350,39 @@ y descarte de lecturas: `docs/fuentes.md`.
   timestamp; documentar qué evento exacto dispara cada marca (ej.: no
   igualar automáticamente "tara" con "inicio real de carga", porque T1
   los describe como pasos distintos).
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: en curso — solo `fechaRecepcion` (evento de recepción/creación)
+  está verificado; pesaje inicial, inicio/fin de carga y pesaje final
+  son de F3/F4, todavía pendientes. Implementación: `Orden.fechaRecepcion`,
+  generada con zona explícita `America/Argentina/Cordoba` (ver
+  `docs/decisiones.md`). Evidencia: timestamp persistido en cada POST.
 
 ### TP21 — Transiciones de estado unidireccionales y auditadas
 - Descripción: los estados avanzan 1→2→3→4 sin saltos ni retrocesos; cada
   transición queda registrada.
 - Alcance: segundo parcial y final.
 - Fuente: la secuencia 1→2→3→4 sin saltos está descripta en T1 de forma
-  consistente en los 5 puntos del proceso. DATO FALTANTE: no se encontró
-  en T1/T2 una cita literal que exija registrar explícitamente "usuario o
-  proceso" y "observación" en cada transición de estado (más allá de los
-  timestamps de TP20); eso es una práctica de auditoría razonable, no un
-  requisito confirmado textualmente todavía.
+  consistente en los 5 puntos del proceso. **CONFIRMADO (corrección: ya
+  no es DATO FALTANTE)** — se leyó el tramo final de T1, no leído en la
+  sesión anterior (fuente `59f2c5bf-3d78-4e71-a60a-153dbecb9c27`, aprox.
+  carácter 19.700-20.300 de 21.713): *"cada cambio de estado debe quedar
+  registrado en la base de datos, incluyendo fecha y hora del cambio,
+  usuario o proceso que realizó la transacción, observaciones se aplica
+  [sic, probable ruido de ASR por "observación si aplica"], se
+  recomienda implementar un log de auditoría de estado para la
+  trazabilidad completa del ciclo de vida de la orden."* La
+  recomendación de un log dedicado no es la única estructura permitida;
+  el requisito en sí (fecha/hora + usuario o proceso + observación si
+  aplica) sí está confirmado textualmente.
 - Fase prevista: F2–F4.
 - Criterio de aceptación: un intento de salto o retroceso de estado se
   rechaza; se puede consultar la secuencia de transiciones de una orden.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: en curso — solo la transición de creación (ninguno→1) está
+  verificada; el rechazo de saltos/retrocesos y las transiciones de
+  F3/F4 siguen pendientes. Implementación: `ordenes/model/HistorialEstado.java`
+  (no es la única estructura posible, es la decisión del equipo para
+  implementarlo). Evidencia: cada recepción válida genera una fila con
+  `estadoNuevo=1`, `usuarioOProceso` = usuario autenticado (nunca del
+  JSON), misma fecha/hora que `Orden.fechaRecepcion`.
 
 ### TP22 — Sin interfaz gráfica para el segundo parcial
 - Descripción: los puntos 1 a 5 se entregan como API, sin ninguna

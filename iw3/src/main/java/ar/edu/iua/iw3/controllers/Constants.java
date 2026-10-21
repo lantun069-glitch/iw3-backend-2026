@@ -16,4 +16,6 @@ public final class Constants {
 	public static final String URL_AUTHORIZATION = URL_BASE + "/authtest";
 
 	public static final String URL_MAIL = URL_BASE + "/mail";
+
+	public static final String URL_ORDERS = URL_BASE + "/orders";
 }

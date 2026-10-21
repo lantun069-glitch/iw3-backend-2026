@@ -16,9 +16,10 @@ excludeFilters = {
 })
 //Entidades
 @EntityScan(basePackages = { 
-		"ar.edu.iua.iw3.model", 
-		"ar.edu.iua.iw3.auth", 
-		"ar.edu.iua.iw3.integration.cli1.model" 
+		"ar.edu.iua.iw3.model",
+		"ar.edu.iua.iw3.auth",
+		"ar.edu.iua.iw3.integration.cli1.model",
+		"ar.edu.iua.iw3.ordenes.model"
 },
 basePackageClasses = {
 		// Se pueden cargar entidades particulares que no estén en los paquetes base

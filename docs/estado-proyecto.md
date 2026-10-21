@@ -1,18 +1,23 @@
 # Estado del proyecto
 
-Último checkpoint: [`2026-10-20-05.md`](checkpoints/2026-10-20-05.md).
-Fase activa: **F2 — pendiente de iniciar**. **F0 y F1 están cerradas.**
-El bloque de F1 (infraestructura local, arranque con `mysqldev`,
-autenticación HTTP) quedó publicado y respaldado en el commit `cf64c61`
-de `feature/setup-inicial`, árbol de trabajo limpio al momento del cierre.
+Último checkpoint: [`2026-10-20-06.md`](checkpoints/2026-10-20-06.md).
+Fase activa: **F2 — en curso.** **F0 y F1 están cerradas.** El bloque de
+F1 (infraestructura local, arranque con `mysqldev`, autenticación HTTP)
+quedó publicado y respaldado en el commit `cf64c61` de
+`feature/setup-inicial`, árbol de trabajo limpio al momento del cierre.
 La guía de reproducción sigue en [`desarrollo-local.md`](desarrollo-local.md).
-No se inició ningún trabajo de F2 todavía.
+
+**F2, primera unidad vertical (recepción de orden): implementada y
+verificada, F2 todavía en curso.** Trabajo hecho en la rama
+`feature/f2-recepcion-ordenes`, publicada con esta entrada — ver sección
+"F2 — primera unidad vertical" más abajo y el checkpoint 06 para el
+detalle completo, límites y evidencia.
 
 ## Repositorios
 
 | Repo | Carpeta | Rama activa | HEAD | Remoto `origin` | Estado |
 | --- | --- | --- | --- | --- | --- |
-| Backend (copia de trabajo) | `iw3-backend-sanitized` | `feature/setup-inicial` | ver checkpoint | `git@github.com:lantun069-glitch/iw3-backend-2026.git` | `feature/setup-inicial` publicada; `main`/`develop` sin publicar, todavía con placeholders del saneamiento |
+| Backend (copia de trabajo) | `iw3-backend-sanitized` | `feature/f2-recepcion-ordenes` | ver checkpoint | `git@github.com:lantun069-glitch/iw3-backend-2026.git` | `feature/setup-inicial` y `feature/f2-recepcion-ordenes` publicadas (la segunda, creada desde el HEAD de F1, con esta entrada); `main`/`develop` sin publicar, todavía con placeholders del saneamiento |
 | Backend (respaldo original) | `iw3-backend` | `feature/setup-inicial` | `b7e705d` | — | Sin tocar, historial original del profesor intacto; no se trabaja sobre esta carpeta |
 | Frontend | `iw3-frontend` | `main` | `34382d2` | `git@github.com:lantun069-glitch/iw3-frontend-2026.git` | Publicada; contiene solo `.gitignore`. Sin scaffold de framework |
 
@@ -289,5 +294,75 @@ fecha de entrega 2026, inconsistencia de densidad, contrato de activación,
 metadatos de aceptación de alarma y stack/CI/hosting FE siguen abiertos;
 Graphify permanece local, ignorado y sin regenerar.
 
-**F2 queda pendiente de iniciar.** No se tocó código, no se ejecutaron
-pruebas ni auditorías nuevas, y no se regeneró Graphify para este cierre.
+**F2 quedó pendiente de iniciar al cierre de F1.** No se tocó código, no
+se ejecutaron pruebas ni auditorías nuevas en esa entrada, y no se
+regeneró Graphify para ese cierre.
+
+## F2 — primera unidad vertical: recepción de orden (en curso)
+
+Rama `feature/f2-recepcion-ordenes`, creada desde el HEAD `491c143` de
+`feature/setup-inicial` (F0/F1 completos). Detalle completo —contrato,
+decisiones, límites y evidencia— en
+[`contrato-f2-recepcion.md`](contrato-f2-recepcion.md),
+[`decisiones.md`](decisiones.md) (sección F2) y
+[`revision-f2-notas-pruebas.md`](revision-f2-notas-pruebas.md). Esta
+sección es un resumen; no reemplaza leer esos documentos.
+
+**Qué se implementó:** únicamente la recepción autenticada de una orden
+nueva (`POST /api/v1/orders`), con sincronización por `externalCode` de
+camión/chofer/cliente/producto, auditoría de la transición de creación
+(`HistorialEstado`) y rechazo de `orderNumber` duplicado (`409`). Cubre
+TP02 a TP07 para este caso de uso únicamente — no hay consulta,
+actualización ni borrado de `Orden` ni de sus referencias; eso no está
+en el alcance de esta unidad.
+
+**Verificado (evidencia real, no solo código inspeccionado):**
+- Creación válida → `201`, estado 1, con los 7 datos de TP02.
+- Sincronización: segunda recepción con el mismo `externalCode` actualiza
+  los campos obligatorios y conserva los opcionales omitidos (no los
+  borra).
+- Duplicado de `orderNumber`, incluido con referencias cambiadas → `409`,
+  valores previos intactos (comparados campo por campo, no solo por
+  conteo de filas), sin historial nuevo.
+- Colisión concurrente de `orderNumber` (dos solicitudes simultáneas) →
+  una `201`, la otra `409`, con rollback de las referencias sincronizadas
+  por la que perdió la carrera.
+- Validación de longitud (`@Size`, alineada con cada columna): límite
+  exacto aceptado, un carácter de más rechazado con `400` y sin
+  persistir nada, para un campo obligatorio y uno opcional.
+- Exposición de errores: `400`/`409`/`500` devuelven `StandartResponse`
+  con `devInfo` siempre `"No stack trace"` (nunca el detalle real de la
+  excepción); `401` es el comportamiento por defecto de Spring Security,
+  sin pasar por `StandartResponse` — son dos mecanismos distintos, no
+  uno solo.
+- Rollback de las dos excepciones *checked* usadas por `recibirOrden`
+  (`FoundException`, `BusinessException`), probadas por separado: la
+  primera con la colisión concurrente de arriba; la segunda con un caso
+  histórico puntual (un `producto.nombre` de 200 caracteres que en su
+  momento no tenía validación de longitud y fallaba por truncamiento de
+  datos a nivel de base, con las filas ya guardadas en la misma
+  transacción revertidas). **Esa evidencia de rollback se conserva como
+  histórica**: con `@Size` ya agregado, ese mismo payload se rechaza
+  ahora con `400` antes de llegar al negocio, así que ese camino
+  puntual hacia `BusinessException` ya no es alcanzable por esa vía. No
+  se debilitó ninguna validación para volver a reproducirlo ni se
+  agregó un mecanismo nuevo capaz de fallar en producción solo para
+  repetir la prueba; el mecanismo de rollback en sí
+  (`@Transactional(rollbackFor = Exception.class)`) no cambió y sigue
+  aplicando a cualquier otra causa de `BusinessException`.
+
+**Pendiente dentro de esta misma unidad, según su avance real (no
+alcance de F3 en adelante):**
+- OpenAPI: solo el `@Tag` básico del controlador; no hay
+  `@Operation`/`@ApiResponse` por caso (400/401/409/500) todavía.
+- Colección Postman: no existe ninguna para este endpoint todavía (no
+  se encontró ningún archivo de colección en el repositorio).
+- No se revisó si otros controladores existentes (ej.
+  `ProductRestController`) comparten el mismo patrón de exposición de
+  `devInfo` que se corrigió acá; el alcance de la revisión fue solo
+  `OrdenRestController`.
+
+**Qué NO es parte de esta unidad (corresponde a F3 en adelante, sin
+empezar):** tara/activación/clave, telemetría de masa/densidad/
+temperatura/caudal, snapshot e histórico, cierre, pesaje final y
+conciliación (TP08–TP19). No se tocó ningún archivo de esas fases.
