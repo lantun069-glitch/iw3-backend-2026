@@ -183,3 +183,51 @@ Requisito **confirmado** (TP21) — no es una decisión del equipo sin
 respaldo. Cita completa, ubicación y aclaración sobre qué sí es decisión
 del equipo (auditar específicamente la creación) en
 `docs/decisiones.md`, sección F2.
+
+## Documentación OpenAPI y colección Postman (TP23, TP24)
+
+**OpenAPI:** el endpoint está anotado con `@Operation` (summary +
+description) y `@ApiResponses` con ejemplos reales para `201`, `400`
+(dos ejemplos: campo obligatorio ausente y JSON malformado), `401` (sin
+cuerpo), `409` y `500`; el request body tiene un ejemplo completo con
+los mismos valores ficticios que este documento. Verificado contra
+`GET /v3/api-docs` con la app corriendo: las cinco respuestas aparecen
+con el esquema real (`StandartResponse` para errores,
+`OrdenRecepcionResponse` para el éxito), y `components.schemas` ya
+mostraba `required`/`maxLength` correctos para `OrdenRecepcionRequest` y
+sus 4 DTO anidados **antes** de agregar cualquier anotación nueva —
+springdoc los deriva directamente de `@NotNull`/`@NotBlank`/`@Size`, así
+que no se duplicó esa información a mano. El esquema de seguridad Bearer
+JWT (`config/OpenApiConfig.java`, base docente) ya se aplica a nivel
+global (`security` en la raíz del documento OpenAPI), verificado.
+
+**Postman:** colección versionable en
+`postman/iw3-f2-recepcion.postman_collection.json`, con 6 requests en
+orden: login, recepción válida, segunda orden reutilizando las mismas
+referencias (`externalCode`) con un `orderNumber` distinto, duplicado de
+`orderNumber`, entrada inválida (campo obligatorio ausente) y solicitud
+sin token. Cada request tiene aserciones de status code y, donde aplica,
+de contenido del cuerpo (mensaje, `code`, `devInfo`). **Límite
+deliberado:** las aserciones verifican solo lo que la respuesta HTTP
+expone; no afirman que un dato se haya sincronizado en la base, porque
+esta unidad no expone un endpoint de consulta para
+Camion/Chofer/Cliente/Producto — esa verificación se hizo aparte,
+directamente contra la base, durante la implementación (ver
+`docs/decisiones.md`, sección F2).
+
+Variables de colección: `baseUrl`, `testUsername`, `testPassword`
+(ninguna con valor real por defecto), `jwtToken` (se completa en tiempo
+de ejecución con la respuesta de login, nunca se imprime ni se guarda en
+un archivo versionado). Los datos de prueba (`orderNumber1`,
+`orderNumber2`, `orderNumberInvalid`, `extSuffix`) se generan en un
+script de pre-request a partir de la hora actual, para que correr la
+colección varias veces no choque con órdenes/referencias de ejecuciones
+anteriores.
+
+`postman/iw3-local.postman_environment.example.json` es un ejemplo sin
+valores reales (mismo criterio que `.env.example`); el archivo real
+(`postman/iw3-local.postman_environment.json`, si se crea) queda
+excluido en `.gitignore`. La ejecución verificada en esta unidad pasó las
+credenciales únicamente por `--env-var` en el comando de `postman
+collection run`, sin login en una cuenta de Postman ni uso de `--output`
+(que requiere esa cuenta): 6/6 requests, 12/12 aserciones, 0 fallos.

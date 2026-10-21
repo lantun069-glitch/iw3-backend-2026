@@ -11,9 +11,12 @@ justificación**. Estado real a esta fecha (ver cada fila para el detalle
 y la evidencia, esto es solo un resumen, no reemplaza leerlas): TP02 a
 TP07 están **verificados** para la unidad de recepción de orden (F2);
 TP20 y TP21 están **en curso** (solo cubren la transición de creación,
-no el resto del ciclo de vida); el resto de los requisitos funcionales
-(TP01, TP08 en adelante) sigue **pendiente**, porque las fases que les
-corresponden (F3 en adelante) todavía no empezaron. TP36, de preparación
+no el resto del ciclo de vida); TP23 y TP24 (OpenAPI y Postman) están
+**en curso**, verificados para esa misma unidad y pendientes de ampliar
+con los endpoints de F3 en adelante; el resto de los requisitos
+funcionales (TP01, TP08–TP19, TP22, TP25 en adelante) sigue
+**pendiente**, porque las fases que les corresponden (F3 en adelante, o
+el cierre del segundo parcial para TP22) todavía no empezaron. TP36, de preparación
 para la defensa, está en curso; todavía no se practicaron las preguntas.
 De las filas de equipo/infraestructura (EQ), EQ01 y EQ02 están en curso
 y EQ03 está verificado.
@@ -405,10 +408,26 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F5.
 - Criterio de aceptación: operaciones, esquemas, unidades y errores
   documentados coinciden con el comportamiento real de la API.
-- Estado: pendiente. Implementación: —. Evidencia: `config/OpenApiConfig.java`
-  ya provee el esquema de seguridad Bearer JWT, reutilizable tal cual
-  (ver `docs/estado-proyecto.md`); falta documentar los endpoints de
-  dominio, que todavía no existen.
+- Estado: en curso (verificado para el único endpoint de dominio que
+  existe hasta ahora; falta documentar los que se agreguen en F3 en
+  adelante). Implementación: `ordenes/controllers/OrdenRestController.java`
+  (`@Operation`, `@ApiResponses` con ejemplos para 201/400/409/500,
+  `@io.swagger.v3.oas.annotations.parameters.RequestBody` con ejemplo de
+  entrada). Evidencia: `GET /v3/api-docs` verificado contra la app
+  corriendo — `paths./api/v1/orders.post` incluye summary, description,
+  ejemplo de request, y las cinco respuestas documentadas (201 con
+  ejemplo; 400 con dos ejemplos — campo obligatorio ausente y JSON
+  malformado —; 401 sin cuerpo; 409 y 500 con ejemplo), todas con el
+  esquema real (`StandartResponse`/`OrdenRecepcionResponse`). La
+  obligatoriedad y los límites de longitud de los campos del DTO
+  (`OrdenRecepcionRequest` y sus 4 DTO anidados) ya aparecían
+  correctamente en `components.schemas` sin anotación adicional, porque
+  springdoc deriva `required`/`maxLength` directamente de
+  `@NotNull`/`@NotBlank`/`@Size` — se verificó esto contra el JSON real
+  antes de agregar cualquier anotación extra, para no duplicar algo que
+  ya funcionaba. `config/OpenApiConfig.java` (base docente) provee el
+  esquema de seguridad Bearer JWT a nivel global, ya aplicado
+  (`security` en la raíz del documento, verificado).
 
 ### TP24 — Colección Postman
 - Descripción: colección Postman que prueba y valida las APIs
@@ -420,8 +439,27 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: la colección se importa sin errores, usa
   variables documentadas (no credenciales fijas) y cada request es
   ejecutable contra el entorno local.
-- Estado: pendiente. Implementación: —. Evidencia: Postman CLI verificado
-  disponible (`1.75.0`), todavía sin usar.
+- Estado: en curso (verificado para la unidad de recepción de orden;
+  falta ampliar con los endpoints de F3 en adelante, según el criterio de
+  "ampliar en el final"). Implementación:
+  `postman/iw3-f2-recepcion.postman_collection.json` (6 requests: login,
+  recepción válida, segunda orden reutilizando referencias existentes,
+  duplicado de `orderNumber`, entrada inválida y solicitud sin token) y
+  `postman/iw3-local.postman_environment.example.json` (variables sin
+  valores reales). Variables de colección para URL/credenciales
+  (`baseUrl`, `testUsername`, `testPassword`, sin valores por defecto
+  sensibles) y datos de prueba generados en tiempo de ejecución
+  (`orderNumber`/`externalCode` con sufijo de timestamp) para no chocar
+  con ejecuciones anteriores. Evidencia: ejecución real con
+  `postman collection run` (sin `postman login`, sin `--output`, para no
+  requerir ni dejar rastro de una cuenta externa) pasando credenciales
+  solo por `--env-var` (nunca escritas en un archivo versionado): 6/6
+  requests, 12/12 aserciones, 0 fallos. Las aserciones verifican
+  únicamente lo que la respuesta HTTP expone (status y cuerpo JSON); no
+  afirman cambios internos de base de datos que la API no permite
+  observar — esa verificación quedó documentada aparte, contra la base,
+  durante la implementación de la unidad (ver `docs/decisiones.md`,
+  sección F2).
 
 ### TP25 — Simulación automatizada del circuito
 - Descripción: runner/tests de Postman que simulan el circuito completo

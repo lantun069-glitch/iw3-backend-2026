@@ -1,17 +1,22 @@
 # Estado del proyecto
 
-Último checkpoint: [`2026-10-20-06.md`](checkpoints/2026-10-20-06.md).
-Fase activa: **F2 — en curso.** **F0 y F1 están cerradas.** El bloque de
-F1 (infraestructura local, arranque con `mysqldev`, autenticación HTTP)
-quedó publicado y respaldado en el commit `cf64c61` de
-`feature/setup-inicial`, árbol de trabajo limpio al momento del cierre.
-La guía de reproducción sigue en [`desarrollo-local.md`](desarrollo-local.md).
+Último checkpoint: [`2026-10-21-01.md`](checkpoints/2026-10-21-01.md).
+Fase activa: **F3 — pendiente de iniciar.** **F0, F1 y F2 están
+cerradas.** El bloque de F1 (infraestructura local, arranque con
+`mysqldev`, autenticación HTTP) quedó publicado y respaldado en el
+commit `cf64c61` de `feature/setup-inicial`, árbol de trabajo limpio al
+momento del cierre. La guía de reproducción sigue en
+[`desarrollo-local.md`](desarrollo-local.md).
 
-**F2, primera unidad vertical (recepción de orden): implementada y
-verificada, F2 todavía en curso.** Trabajo hecho en la rama
-`feature/f2-recepcion-ordenes`, publicada con esta entrada — ver sección
-"F2 — primera unidad vertical" más abajo y el checkpoint 06 para el
-detalle completo, límites y evidencia.
+**F2 cerrada.** Primera y única unidad vertical de F2 (recepción de
+orden): implementada, verificada, documentada (OpenAPI) y con una
+colección Postman reproducible y ejecutada. Trabajo en la rama
+`feature/f2-recepcion-ordenes`. Ver sección "F2 — primera unidad
+vertical" más abajo, "Cierre de F2" al final de esta sección, y los
+checkpoints 06 y 2026-10-21-01 para el detalle completo, límites y
+evidencia. **F3 (tara, clave de activación, telemetría — TP08–TP13)
+queda pendiente de iniciar: antes de implementar, revisar el contrato de
+tara y activación.**
 
 ## Repositorios
 
@@ -298,7 +303,7 @@ Graphify permanece local, ignorado y sin regenerar.
 se ejecutaron pruebas ni auditorías nuevas en esa entrada, y no se
 regeneró Graphify para ese cierre.
 
-## F2 — primera unidad vertical: recepción de orden (en curso)
+## F2 — primera unidad vertical: recepción de orden (cerrada)
 
 Rama `feature/f2-recepcion-ordenes`, creada desde el HEAD `491c143` de
 `feature/setup-inicial` (F0/F1 completos). Detalle completo —contrato,
@@ -351,12 +356,30 @@ en el alcance de esta unidad.
   (`@Transactional(rollbackFor = Exception.class)`) no cambió y sigue
   aplicando a cualquier otra causa de `BusinessException`.
 
+**Hecho en una segunda ronda sobre esta misma unidad (documentación y
+reproducibilidad, sin dominio nuevo):**
+- OpenAPI: `@Operation`, `@ApiResponses` con ejemplos reales para
+  201/400 (dos casos)/409/500, ejemplo de request body. Verificado
+  contra `GET /v3/api-docs` con la app corriendo — no solo anotado, sino
+  comprobado que el JSON generado coincide con el comportamiento real.
+  Detalle en `docs/contrato-f2-recepcion.md`.
+- Colección Postman versionable
+  (`postman/iw3-f2-recepcion.postman_collection.json`, 6 requests:
+  login, recepción válida, segunda orden reutilizando referencias,
+  duplicado, entrada inválida, sin token) con aserciones de status y
+  contenido, variables sin credenciales reales, y datos de prueba
+  generados en tiempo de ejecución para no chocar con corridas
+  anteriores. Ejecutada una vez con `postman collection run` pasando
+  credenciales solo por `--env-var` (sin `postman login`, sin
+  `--output`): 6/6 requests, 12/12 aserciones, 0 fallos. Las aserciones
+  no afirman cambios internos de base de datos — solo lo que la
+  respuesta HTTP expone. Detalle en `docs/contrato-f2-recepcion.md`.
+
 **Pendiente dentro de esta misma unidad, según su avance real (no
 alcance de F3 en adelante):**
-- OpenAPI: solo el `@Tag` básico del controlador; no hay
-  `@Operation`/`@ApiResponse` por caso (400/401/409/500) todavía.
-- Colección Postman: no existe ninguna para este endpoint todavía (no
-  se encontró ningún archivo de colección en el repositorio).
+- OpenAPI y Postman cubren solo este endpoint; falta ampliar ambos
+  cuando se agreguen los endpoints de F3 en adelante (es el criterio
+  normal de "ampliar en el final", no una deuda de esta unidad).
 - No se revisó si otros controladores existentes (ej.
   `ProductRestController`) comparten el mismo patrón de exposición de
   `devInfo` que se corrigió acá; el alcance de la revisión fue solo
@@ -366,3 +389,69 @@ alcance de F3 en adelante):**
 empezar):** tara/activación/clave, telemetría de masa/densidad/
 temperatura/caudal, snapshot e histórico, cierre, pesaje final y
 conciliación (TP08–TP19). No se tocó ningún archivo de esas fases.
+
+## Cierre de F2
+
+**Aprobación:** el usuario aprobó el cierre de F2 en base a la
+implementación ya revisada (recepción de orden, TP02–TP07 y TP20/TP21
+para la transición de creación) y a los resultados reportados de
+OpenAPI/Postman en esta misma sesión. No se volvió a ejecutar la batería
+manual completa ni ninguna auditoría para este cierre: se basa en el
+trabajo ya verificado y registrado en el checkpoint 06 y en
+`docs/contrato-f2-recepcion.md`/`docs/decisiones.md` (sección F2).
+
+**Evidencia de cierre — Postman (TP24):** ejecución real de
+`postman/iw3-f2-recepcion.postman_collection.json` con
+`postman collection run`, credenciales solo por `--env-var` (sin
+`postman login`, sin `--output`): **6 requests, 12 aserciones, 0
+fallos**. Las aserciones verifican únicamente lo que la respuesta HTTP
+expone (status code y cuerpo JSON); no afirman cambios internos de base
+de datos que la API no permite observar — esa verificación quedó hecha
+aparte, contra la base, durante la implementación de la unidad (ver
+`docs/decisiones.md`, sección F2). Evidencia de cierre — OpenAPI
+(TP23): `GET /v3/api-docs` verificado contra la app corriendo, con las 5
+respuestas documentadas (201/400×2/401/409/500) y esquemas reales.
+
+**Evidencia de cierre — Git:** el commit que agrupa esta entrada (checkpoint
+`2026-10-21-01`, este archivo y los cambios de OpenAPI/Postman) queda
+publicado en `origin/feature/f2-recepcion-ordenes`; el hash exacto y el
+estado de `git status -sb` posterior al push están en el checkpoint
+`2026-10-21-01.md` y en el resumen de cierre de esa sesión.
+
+**F2 queda formalmente cerrada.** Se conservan, sin resolver ni dar por
+superados, todos los pendientes y límites ya registrados:
+- OpenAPI y Postman cubren solo el endpoint de recepción de esta unidad;
+  ambos se amplían recién cuando se agreguen los endpoints de F3 en
+  adelante — no es una deuda de esta unidad, es el criterio normal de
+  "ampliar en el final".
+- La evidencia de rollback de `BusinessException` sigue siendo
+  histórica: el payload exacto que se usó para probarla ya no llega al
+  negocio con `@Size` agregado (ver `docs/decisiones.md`, sección F2).
+  No se repitió ni se generalizó esa prueba.
+- No se revisó si `ProductRestController` (dominio de ejemplo del
+  profesor) comparte el mismo patrón de exposición de `devInfo` que se
+  corrigió en `OrdenRestController`; quedó fuera del alcance de esta
+  unidad.
+- Arranque real sin `JWT_SECRET` no probado; `main`/`develop` sin probar
+  ni publicar; correo real, proveedor SMTP institucional y remitente
+  autorizado pendientes; autorización por roles funcionales (más allá
+  del rol de prueba insertado a mano) no implementada.
+- Requisitos de dominio: TP01, TP08–TP19, TP22, TP25 en adelante siguen
+  en **pendiente** (corresponden a F3 en adelante, o al cierre completo
+  del segundo parcial); TP36 en **en curso** sin práctica real con una
+  persona.
+- Fecha de entrega 2026, inconsistencia de densidad, contrato de
+  activación, metadatos de aceptación de alarma y stack/CI/hosting FE
+  siguen abiertos; no se consultó ninguna fuente nueva de cátedra en
+  esta sesión.
+- Graphify permanece local, ignorado y **sin actualizar en este
+  cierre** — decisión del equipo (20/10/2026): no actualizar Graphify en
+  cada checkpoint ni al cerrar sesión por defecto, ni siquiera al cerrar
+  una fase salvo pedido expreso; queda pendiente para cuando se solicite.
+
+**F3 (tara, clave de activación de 5 dígitos, recuperación de preset y
+telemetría — TP08–TP13, transición 1→2) queda pendiente de iniciar.** No
+se tocó ningún archivo de esa fase en esta sesión. Antes de implementar,
+revisar y presentar el contrato de tara y activación (alcance, fuente,
+archivos afectados, verificación) y esperar validación, según la sección
+1 de las reglas del equipo.

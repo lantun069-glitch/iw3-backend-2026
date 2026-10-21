@@ -23,6 +23,13 @@ import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionResponse;
 import ar.edu.iua.iw3.ordenes.model.Orden;
 import ar.edu.iua.iw3.util.IStandartResponseBusiness;
+import ar.edu.iua.iw3.util.StandartResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -61,8 +68,31 @@ public class OrdenRestController extends BaseRestController {
 	@Autowired
 	private IStandartResponseBusiness response;
 
+	@Operation(summary = "Recibir una orden de carga (estado 1)",
+			description = "Crea una orden nueva en estado 1, o sincroniza camion/chofer/cliente/producto "
+					+ "por externalCode si ya existian. No acepta estado, id interno, fechaRecepcion ni el actor "
+					+ "del historial en el JSON de entrada: el servidor los genera. Requiere autenticacion JWT "
+					+ "(Authorization: Bearer <token>), igual que el resto de la API.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "201", description = "Orden creada en estado 1.",
+					content = @Content(schema = @Schema(implementation = OrdenRecepcionResponse.class), examples = @ExampleObject(name = "Orden creada", value = "{\"id\":1,\"orderNumber\":900001,\"estado\":1,\"fechaRecepcion\":\"2026-10-20T20:06:30.119016859\"}"))),
+			@ApiResponse(responseCode = "400", description = "Entrada invalida: campo obligatorio ausente/vacio, texto que excede su longitud maxima, decimales fuera de precision, cantidad <= 0, o JSON malformado.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = {
+							@ExampleObject(name = "Campo obligatorio ausente", value = "{\"message\":\"camion.patente: must not be blank\",\"code\":400,\"devInfo\":\"No stack trace\"}"),
+							@ExampleObject(name = "JSON malformado", value = "{\"message\":\"JSON de entrada invalido o malformado\",\"code\":400,\"devInfo\":\"No stack trace\"}")
+					})),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado. Respuesta estandar de Spring Security, sin cuerpo JSON (no pasa por StandartResponse).",
+					content = @Content),
+			@ApiResponse(responseCode = "409", description = "orderNumber ya existe (chequeo previo o colision concurrente detectada por la restriccion unica de la base).",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Ya existe una orden con orderNumber=900001\",\"code\":409,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
 	@PostMapping(value = "", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-	public ResponseEntity<?> recibir(@Valid @RequestBody OrdenRecepcionRequest request) {
+	public ResponseEntity<?> recibir(
+			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
+					content = @Content(examples = @ExampleObject(value = "{\"orderNumber\":900001,\"fechaCargaPrevista\":\"2026-11-03T08:30:00\",\"presetKg\":10000.500,\"camion\":{\"externalCode\":\"CAM-00891\",\"patente\":\"AB123CD\",\"descripcion\":\"Camion cisterna GLP\",\"capacidadKg\":12000.000},\"chofer\":{\"externalCode\":\"CHO-00457\",\"nombre\":\"Marcos\",\"apellido\":\"Toledo\",\"documento\":\"30111222\"},\"cliente\":{\"externalCode\":\"CLI-00019\",\"razonSocial\":\"Distribuidora del Sur S.A.\",\"contacto\":\"compras@distribuidorasur.com.ar\"},\"producto\":{\"externalCode\":\"PRD-GLP01\",\"nombre\":\"GLP\",\"descripcion\":\"Gas licuado de petroleo\"}}")))
+			OrdenRecepcionRequest request) {
 		// El actor viene del contexto de seguridad, nunca del JSON de entrada.
 		String actor = getUserLogged().getUsername();
 		try {

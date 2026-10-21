@@ -12,3 +12,7 @@ CLAUDE.local.md
 
 # Local Graphify output (generated graph/report, not published)
 graphify-out/
+
+# Entornos locales de Postman con credenciales reales (real secrets live here, never commit them)
+postman/*.postman_environment.json
+!postman/*.postman_environment.example.json
