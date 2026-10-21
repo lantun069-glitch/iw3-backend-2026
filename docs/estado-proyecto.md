@@ -1,13 +1,13 @@
 # Estado del proyecto
 
-Último checkpoint: [`2026-10-21-03.md`](checkpoints/2026-10-21-03.md).
-Fase activa: **F3 — ambas unidades (tara/activación y telemetría)
-implementadas, revisadas y aprobadas; la fase sigue abierta** (faltan
-TP14 opcional, y TP15 en adelante, que corresponden a F4). **F0, F1 y
-F2 están cerradas.** El bloque de F1 (infraestructura local, arranque
-con `mysqldev`, autenticación HTTP) quedó publicado y respaldado en el
-commit `cf64c61` de `feature/setup-inicial`, árbol de trabajo limpio al
-momento del cierre. La guía de reproducción sigue en
+Último checkpoint: [`2026-10-21-04.md`](checkpoints/2026-10-21-04.md).
+Fase activa: **F3 cerrada para el alcance del segundo parcial** (tara,
+activación, descarte, snapshot e histórico — TP08–TP13). **F4** (cierre
+de carga, pesaje final, conciliación) **queda pendiente de iniciar.**
+**F0, F1 y F2 están cerradas.** El bloque de F1 (infraestructura local,
+arranque con `mysqldev`, autenticación HTTP) quedó publicado y
+respaldado en el commit `cf64c61` de `feature/setup-inicial`, árbol de
+trabajo limpio al momento del cierre. La guía de reproducción sigue en
 [`desarrollo-local.md`](desarrollo-local.md).
 
 **F2 cerrada.** Primera y única unidad vertical de F2 (recepción de
@@ -16,17 +16,12 @@ colección Postman reproducible y ejecutada. Trabajo en la rama
 `feature/f2-recepcion-ordenes`. Ver sección "F2 — primera unidad
 vertical" más abajo, "Cierre de F2" al final de esta sección, y los
 checkpoints 06 y 2026-10-21-01 para el detalle completo, límites y
-evidencia. **F3, primera unidad (tara y activación, TP08-TP09):
-implementada, revisada y aprobada, publicada en la rama
-`feature/f3-tara-activacion`** — ver sección "F3 — primera unidad" más
-abajo y el checkpoint 2026-10-21-02 para el hash y el estado del
-respaldo remoto. **F3, segunda unidad (telemetría, TP10-TP13):
-implementada, revisada y aprobada, publicada en la misma rama** — ver
-sección "F3 — segunda unidad" más abajo y el checkpoint 2026-10-21-03.
-**F3 sigue abierta como fase:** no se declara cerrada; quedan
-pendientes dentro de su alcance TP14 (opcional, no adelantado) y
-TP15–TP19 (cierre de carga, pesaje final, conciliación — corresponden a
-F4, todavía no iniciada).
+evidencia. **F3 cerrada**, ambas unidades (tara/activación TP08-TP09 y
+telemetría TP10-TP13), publicadas en `feature/f3-tara-activacion` — ver
+secciones "F3 — primera unidad", "F3 — segunda unidad" y "Cierre de
+F3" más abajo, y los checkpoints 2026-10-21-02/03/04 para hashes y
+estado del respaldo remoto. **TP14 queda diferido explícitamente para
+el final (F6): no se da por cumplido ni se elimina de la matriz.**
 
 ## Repositorios
 
@@ -695,13 +690,85 @@ orden. Ningún detalle de una orden apareció bajo otra.
 - `docs/contrato-f3-telemetria.md` (nuevo), `docs/decisiones.md`,
   `docs/requisitos.md`, este archivo.
 
-**Estado de F3 como fase:** sigue **abierta, no cerrada**. Con esta
-unidad, TP08–TP13 quedan verificados; dentro del alcance de F3 (ver
-matriz de cobertura en `docs/requisitos.md`) quedan pendientes: TP14
-(frecuencia configurable, opcional en el parcial, no adelantada),
-TP15–TP19 (cierre de carga, pesaje final, conciliación — F4, fuera de
-alcance de esta sesión), TP20/TP21 todavía
-en curso (faltan las transiciones de F4), y TP22 (cobertura completa
-1–5 sin UI) no se puede declarar hasta que F4 exista. **Próximo paso:**
-no se inicia F4 en esta entrada; antes de implementarla corresponde
-presentar su contrato para revisión, igual que las dos unidades de F3.
+## Cierre de F3
+
+**Aprobación:** el usuario aprobó el cierre de F3 para el alcance del
+segundo parcial (tara, activación, descarte, snapshot e histórico —
+TP08–TP13) en base a la implementación y evidencia ya revisadas en las
+dos unidades de esta fase, sin repetir pruebas ni auditorías nuevas
+para este cierre.
+
+**Verificación previa al cierre — apartado pertinente del plan de
+fases:** TP14 (frecuencia de almacenamiento configurable) tiene su fase
+prevista en F6, no en F3 — F3 solo permite adelantarla como opción
+explícita, lo que este equipo decidió no hacer. El criterio de salida
+de F3 (clave correcta/incorrecta, actualización de snapshot, descarte
+de lecturas inválidas, histórico y rechazo fuera de estado) no incluye
+TP14. **No se encontró contradicción** entre cerrar F3 sin TP14 y el
+plan de fases vigente: un requisito futuro (TP14, en F6) no es
+dependencia de F3 y no impide cerrarla.
+
+**Evidencia de cierre — tara y activación (TP08/TP09, primera
+unidad):** colección `postman/iw3-f3-tara-activacion.postman_collection.json`
+con `postman collection run --iteration-count 2` (dos corridas
+completas en el mismo proceso, conservando variables de colección):
+**34 requests, 40 aserciones, 0 fallos**.
+
+**Evidencia de cierre — telemetría (TP10–TP12, segunda unidad):**
+colección `postman/iw3-f3-telemetria.postman_collection.json` con el
+mismo método (`--iteration-count 2`): **34 requests, 38 aserciones, 0
+fallos**.
+
+**Evidencia de cierre — histórico (TP13):** consulta SQL (preparada en
+`docs/contrato-f3-telemetria.md`, columnas reales
+`temperaturac`/`caudal_kgh`) ejecutada directamente contra la base por
+el usuario, no por esta sesión. Verificado puntualmente para las
+órdenes `920001`/`920003`/`920005` — **3/2/2 filas de detalle**
+respectivamente, coincidentes con la cantidad de lecturas aceptadas de
+cada una (ninguna descartada agregó fila), masas esperadas, y
+`fechaInicioCarga`/`fechaUltimaLectura` del snapshot coincidentes con
+la `fecha_lectura` de la primera y la última fila de detalle de cada
+orden. No se generaliza a escenarios no probados.
+
+**F3 queda formalmente cerrada para el alcance del segundo parcial.**
+Se conservan, sin resolver ni dar por superados, todos los pendientes y
+límites ya registrados en ambas unidades:
+- **TP14 queda diferido explícitamente para el final (F6): no se da
+  por cumplido ni se elimina de la matriz.** Ver su fila en
+  `docs/requisitos.md`.
+- Densidad: duda sobre rango/unidad sin incompatibilidad demostrada,
+  sin resolver por cuenta propia (ver `docs/contrato-f3-telemetria.md`
+  y `docs/fuentes.md`); se sigue almacenando el valor recibido tal cual,
+  sin conversión ni validación de rango.
+- Concurrencia: el mecanismo (`PESSIMISTIC_WRITE`) ordena el
+  *procesamiento* según adquisición del bloqueo, no garantiza el orden
+  de llegada por red; de las dos carreras concurrentes documentadas
+  (tara/activación y telemetría) solo se observó empíricamente un orden
+  de procesamiento posible en cada caso, no ambos.
+- Sin lectura directa de base para los casos de rechazo de tara/
+  activación (primera unidad): esa verificación sigue apoyada en
+  revisión de código y evidencia HTTP indirecta, no en una lectura de
+  fila.
+- No se agregó fila de auditoría en `HistorialEstado` para la
+  activación (no cambia `estado`); no se probó un caso real de `500`
+  en ninguna de las dos unidades; no se verificó comportamiento ante
+  caída de conexión a mitad de transacción.
+- Requisitos de dominio fuera de esta fase: TP01, TP15–TP19, TP22,
+  TP25 en adelante siguen en **pendiente** (corresponden a F4 en
+  adelante, o al cierre completo del segundo parcial para TP22); TP20 y
+  TP21 quedan **en curso** (cubren creación y tara; faltan las
+  transiciones de F4). TP36 sigue en **en curso**, sin práctica real con
+  una persona.
+- Fecha de entrega 2026, metadatos de aceptación de alarma y
+  stack/CI/hosting FE siguen abiertos; no se consultó ninguna fuente
+  nueva de cátedra para este cierre.
+- Graphify permanece local, ignorado y **sin actualizar en este
+  cierre** — misma decisión del equipo (20/10/2026) que en el cierre de
+  F2: no se actualiza por defecto ni siquiera al cerrar una fase, salvo
+  pedido expreso.
+
+**F4 (cierre de carga 2→3, pesaje final 3→4 y conciliación — TP15–TP19)
+queda pendiente de iniciar.** No se tocó ningún archivo de esa fase en
+esta sesión. Antes de implementar, presentar el contrato de cierre y
+pesaje final (alcance, fuente, archivos afectados, verificación) y
+esperar validación, según la sección 1 de las reglas del equipo.

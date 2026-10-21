@@ -387,7 +387,10 @@ y descarte de lecturas: `docs/fuentes.md`.
   segunda unidad de F3** (TP10-TP13): esa unidad guarda cada lectura
   aceptada en `DetalleCarga`, sin frecuencia configurable ni
   deduplicación, por decisión explícita de mantener esto fuera de
-  alcance (ver `docs/contrato-f3-telemetria.md`). Implementación: —.
+  alcance (ver `docs/contrato-f3-telemetria.md`). **Al cierre de F3**
+  (ver `docs/estado-proyecto.md`, "Cierre de F3"): queda diferido
+  explícitamente para el final, conforme a su fase prevista (F6); no
+  se da por cumplido ni se elimina de la matriz. Implementación: —.
   Evidencia: —.
 
 ### TP15 — Cierre explícito 2→3
