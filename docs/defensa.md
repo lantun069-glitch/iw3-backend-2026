@@ -259,3 +259,41 @@ Detalle completo: `docs/decisiones.md`, sección "F4 — cierre".
      F4? (Fue una decisión explícita: ninguno de los dos es un
      requisito confirmado del plan para este cierre: quedan como
      límites documentados, no bloqueantes.)
+
+## F6 — primera unidad: roles y permisos (TP27)
+
+- **Qué hace:** agrega `@PreAuthorize` a las 7 operaciones de
+  `OrdenRestController`. Recepción exige `ROLE_SUPERVISOR`; las otras
+  6 aceptan `ROLE_OPERADOR` o `ROLE_SUPERVISOR`.
+- **Por qué:** TP27 exige roles que regulen el consumo de la API; el
+  mapeo concreto (qué rol para qué operación) es decisión del equipo,
+  no texto literal de la fuente.
+- **Concepto de clase:** autorización declarativa con Spring Security
+  (`@EnableMethodSecurity`, `@PreAuthorize`, `hasAuthority`/
+  `hasAnyAuthority`), distinta de autenticación (401 sigue siendo "sin
+  identidad"; 403 es "con identidad, sin permiso").
+- **Cómo comprobarlo:** colección Postman
+  `postman/iw3-f6-roles-permisos.postman_collection.json` con 3
+  usuarios de prueba (operador, supervisor, sin rol); 33 aserciones.
+  También reproducible con `curl` y JWT de cada usuario.
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué `hasAuthority('ROLE_SUPERVISOR')` y no
+     `hasRole('ROLE_SUPERVISOR')`, si los controladores de ejemplo del
+     profesor usan `hasRole`? (Porque `hasRole` antepone `ROLE_` a lo
+     que recibe: `hasRole('ROLE_ADMIN')` exige la autoridad
+     `ROLE_ROLE_ADMIN`, que ningún usuario tiene — es un bug ya
+     presente en el código de ejemplo, no reproducido acá.)
+  2. ¿Por qué un usuario autenticado pero sin el rol correcto
+     inicialmente recibía 401 en vez de 403, y cómo se solucionó sin
+     tocar `SecurityConfiguration`? (Spring Security decidía 403
+     correctamente, pero el forward interno a `/error` —no público—
+     volvía a pasar por la cadena de seguridad y lo convertía en 401;
+     se agregó un `@ExceptionHandler(AccessDeniedException.class)`
+     local al controlador, mismo patrón ya usado para el 400 de
+     validación en F2.)
+  3. ¿Alcanza con revisar la anotación para confirmar que
+     `ROLE_SUPERVISOR` también puede hacer tara/activación/cierre/
+     pesaje-final, ya que la anotación es la misma que para
+     `ROLE_OPERADOR`? (No se tomó por supuesto: se ejecutó un segundo
+     circuito completo —"Orden B"— enteramente con `ROLE_SUPERVISOR`
+     para confirmarlo con evidencia, no solo por lectura del código.)

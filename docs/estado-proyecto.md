@@ -1119,3 +1119,62 @@ confirmado. Por eso **F5 no se declara completamente cerrada**: queda
 cerrada la integración de código/documentación a `main`, pero la
 puerta de salida de fase (sección 12 de `CLAUDE.md`) exige también
 TP26 y, para una entrega desplegable, el despliegue verificado.
+
+## F6 — primera unidad: roles y permisos (TP27)
+
+**Alcance:** autorización por rol sobre las 7 operaciones de
+`OrdenRestController` ya implementadas en F2–F5. No cubre TP28/TP29
+(alarmas/correo/aceptación), TP14 (frecuencia configurable) ni TP19
+(promedios obligatorios): quedan para unidades siguientes de F6.
+Rama `feature/f6-roles-permisos`, creada desde `develop` en `a264ada`.
+
+**Resumen:** dos roles nuevos, `ROLE_OPERADOR` y `ROLE_SUPERVISOR`
+(decisión del equipo, no texto literal de T2). Recepción exige
+únicamente `ROLE_SUPERVISOR`; tara, activación, lecturas, cierre,
+pesaje final y la consulta de conciliación aceptan cualquiera de los
+dos. Implementado con `@PreAuthorize`/`hasAuthority`/`hasAnyAuthority`
+en `OrdenRestController` (sin tocar `SecurityConfiguration`, sin
+modelo nuevo: `User`/`Role` ya existían en la base heredada).
+
+**Hallazgo de esta unidad:** el 403 de `@PreAuthorize` llegaba al
+cliente como 401, por el mismo bug de forward a `/error` ya conocido
+de F2 (`MethodArgumentNotValidException`, 400→401), ahora con
+`AccessDeniedException` (403→401). Corregido con el mismo patrón ya
+aprobado: un `@ExceptionHandler` local al controlador, sin tocar
+`SecurityConfiguration`. Detalle completo, matriz de permisos y
+evidencia de verificación en `docs/contrato-f6-roles-permisos.md` y
+`docs/decisiones.md`.
+
+**Verificación:** compilación limpia; 30/30 verificaciones manuales
+por `curl`; colección Postman nueva
+`postman/iw3-f6-roles-permisos.postman_collection.json` (33
+aserciones) vía Postman CLI, 33/33 OK; regresión de la colección ya
+verificada del runner de F5 (34 aserciones) con el usuario
+`ROLE_SUPERVISOR` nuevo en lugar del usuario de F1: 34/34 OK, sin
+modificar esa colección. Respuestas 401/403 revisadas: sin stacktrace
+ni mensaje SQL.
+
+**Usuarios de prueba:** tres usuarios nuevos (`ROLE_OPERADOR` solo,
+`ROLE_SUPERVISOR` solo, sin ningún rol), creados a mano igual que el
+usuario de F1 pero con un programa Java de un solo uso para el hash
+BCrypt (en vez de `GET /demo/encodepass`), para no exponer la
+contraseña en una URL HTTP. Credenciales en `.env.testroles`
+(gitignored, permisos `600`); el usuario `qa_f1_dfab890c` de F1 no se
+modificó. Consecuencia: a partir de esta unidad, las colecciones
+Postman de F2–F5 necesitan un usuario con `ROLE_SUPERVISOR` en
+`testUsername`/`testPassword` para seguir pasando.
+
+**Documentos actualizados:** `docs/contrato-f6-roles-permisos.md`
+(nuevo), `docs/requisitos.md` (TP27), `docs/decisiones.md`,
+`docs/desarrollo-local.md` (sección 5.1, nueva),
+`postman/iw3-f6-roles-permisos.postman_collection.json` (nuevo),
+`postman/iw3-local.postman_environment.example.json` (variables
+nuevas, sin valores reales), este archivo.
+
+**Sin commit/push/merge** en esta unidad, por instrucción explícita:
+los cambios quedan en el árbol de trabajo de `feature/f6-roles-permisos`.
+`main`, `develop` y el tag `parcial-2-local-v1` no se tocaron.
+
+**Próximo paso:** confirmar con el usuario la siguiente unidad de F6
+(alarmas TP28/TP29, frecuencia configurable TP14, o promedios TP19) y
+recién entonces commitear esta unidad.

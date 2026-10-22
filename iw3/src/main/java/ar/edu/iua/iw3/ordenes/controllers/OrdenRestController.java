@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -96,7 +97,7 @@ public class OrdenRestController extends BaseRestController {
 			description = "Crea una orden nueva en estado 1, o sincroniza camion/chofer/cliente/producto "
 					+ "por externalCode si ya existian. No acepta estado, id interno, fechaRecepcion ni el actor "
 					+ "del historial en el JSON de entrada: el servidor los genera. Requiere autenticacion JWT "
-					+ "(Authorization: Bearer <token>), igual que el resto de la API.")
+					+ "(Authorization: Bearer <token>), igual que el resto de la API. Requiere el rol ROLE_SUPERVISOR (decision del equipo, TP27): ROLE_OPERADOR no puede recibir ordenes.")
 	@ApiResponses({
 			@ApiResponse(responseCode = "201", description = "Orden creada en estado 1.",
 					content = @Content(schema = @Schema(implementation = OrdenRecepcionResponse.class), examples = @ExampleObject(name = "Orden creada", value = "{\"id\":1,\"orderNumber\":900001,\"estado\":1,\"fechaRecepcion\":\"2026-10-20T20:06:30.119016859\"}"))),
@@ -107,12 +108,15 @@ public class OrdenRestController extends BaseRestController {
 					})),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado. Respuesta estandar de Spring Security, sin cuerpo JSON (no pasa por StandartResponse).",
 					content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "409", description = "orderNumber ya existe (chequeo previo o colision concurrente detectada por la restriccion unica de la base).",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Ya existe una orden con orderNumber=900001\",\"code\":409,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
 	})
 	@PostMapping(value = "", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAuthority('ROLE_SUPERVISOR')")
 	public ResponseEntity<?> recibir(
 			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
 					content = @Content(examples = @ExampleObject(value = "{\"orderNumber\":900001,\"fechaCargaPrevista\":\"2026-11-03T08:30:00\",\"presetKg\":10000.500,\"camion\":{\"externalCode\":\"CAM-00891\",\"patente\":\"AB123CD\",\"descripcion\":\"Camion cisterna GLP\",\"capacidadKg\":12000.000},\"chofer\":{\"externalCode\":\"CHO-00457\",\"nombre\":\"Marcos\",\"apellido\":\"Toledo\",\"documento\":\"30111222\"},\"cliente\":{\"externalCode\":\"CLI-00019\",\"razonSocial\":\"Distribuidora del Sur S.A.\",\"contacto\":\"compras@distribuidorasur.com.ar\"},\"producto\":{\"externalCode\":\"PRD-GLP01\",\"nombre\":\"GLP\",\"descripcion\":\"Gas licuado de petroleo\"}}")))
@@ -140,13 +144,15 @@ public class OrdenRestController extends BaseRestController {
 			description = "Registra el pesaje inicial (camion vacio), genera la clave de activacion de 5 "
 					+ "digitos y transiciona la orden a estado 2. Requiere que la orden exista y este en "
 					+ "estado 1. La clave devuelta no se repite en ninguna otra respuesta ni se registra en "
-					+ "logs. Requiere autenticacion JWT.")
+					+ "logs. Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Tara registrada, orden en estado 2.",
 					content = @Content(schema = @Schema(implementation = TaraResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"estado\":2,\"taraKg\":12000.000,\"fechaTara\":\"2026-10-21T09:00:00\",\"claveActivacion\":54231}"))),
 			@ApiResponse(responseCode = "400", description = "taraKg ausente, no positivo, o con mas de 3 decimales/12 enteros.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"taraKg: must be greater than 0\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 1.",
@@ -156,6 +162,7 @@ public class OrdenRestController extends BaseRestController {
 	})
 	@PostMapping(value = "/{orderNumber}/tara", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
 	public ResponseEntity<?> registrarTara(@PathVariable Integer orderNumber,
 			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
 					content = @Content(examples = @ExampleObject(value = "{\"taraKg\":12000.000}")))
@@ -182,7 +189,7 @@ public class OrdenRestController extends BaseRestController {
 					+ "coincide, devuelve el preset. Requiere que la orden exista y este en estado 2. "
 					+ "Idempotente mientras la orden siga en estado 2: una clave correcta repetida devuelve el "
 					+ "mismo preset y la misma fechaActivacion ya fijada, sin volver a escribirla. No cambia el "
-					+ "estado de la orden. Requiere autenticacion JWT.")
+					+ "estado de la orden. Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Clave correcta: preset devuelto.",
 					content = @Content(schema = @Schema(implementation = ActivacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"presetKg\":10000.500,\"fechaActivacion\":\"2026-10-21T09:05:00\"}"))),
@@ -192,6 +199,8 @@ public class OrdenRestController extends BaseRestController {
 							@ExampleObject(name = "Clave incorrecta", value = "{\"message\":\"Clave de activacion incorrecta\",\"code\":400,\"devInfo\":\"No stack trace\"}")
 					})),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 2.",
@@ -201,6 +210,7 @@ public class OrdenRestController extends BaseRestController {
 	})
 	@PostMapping(value = "/{orderNumber}/activacion", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
 	public ResponseEntity<?> activar(@PathVariable Integer orderNumber,
 			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
 					content = @Content(examples = @ExampleObject(value = "{\"clave\":54231}")))
@@ -230,7 +240,7 @@ public class OrdenRestController extends BaseRestController {
 					+ "masa<=0, o masa estrictamente menor a la ultima aceptada se descarta (aceptada=false, con "
 					+ "motivoDescarte): no es un error, siempre responde 200 y el snapshot queda sin cambios. "
 					+ "La primera lectura aceptada fija fechaInicioCarga; no se vuelve a modificar despues. "
-					+ "Requiere autenticacion JWT.")
+					+ "Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Lectura procesada (aceptada o descartada; ver el campo aceptada).",
 					content = @Content(schema = @Schema(implementation = LecturaResponse.class), examples = {
@@ -240,6 +250,8 @@ public class OrdenRestController extends BaseRestController {
 			@ApiResponse(responseCode = "400", description = "Algun campo ausente, o con mas decimales/enteros que la precision admitida.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"masaAcumuladaKg: must not be null\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 2, o no fue activada todavia.",
@@ -252,6 +264,7 @@ public class OrdenRestController extends BaseRestController {
 	})
 	@PostMapping(value = "/{orderNumber}/lecturas", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
 	public ResponseEntity<?> registrarLectura(@PathVariable Integer orderNumber,
 			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
 					content = @Content(examples = @ExampleObject(value = "{\"masaAcumuladaKg\":4000.000,\"densidad\":0.5400,\"temperaturaC\":18.50,\"caudalKgH\":3000.000}")))
@@ -283,11 +296,13 @@ public class OrdenRestController extends BaseRestController {
 					+ "tenga fechaActivacion y al menos una lectura aceptada (decisiones del equipo adicionales "
 					+ "al requisito de la fuente). No tiene body. fechaFinCarga en la respuesta es la ultima "
 					+ "lectura valida recibida, no el instante de esta llamada. No hay cierre automatico por "
-					+ "alcanzar el preset. Requiere autenticacion JWT.")
+					+ "alcanzar el preset. Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Carga cerrada, orden en estado 3.",
 					content = @Content(schema = @Schema(implementation = CierreResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"estado\":3,\"fechaFinCarga\":\"2026-10-21T10:07:00.845232\"}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 2 (incluye cierre repetido), no fue activada, o no tiene lecturas aceptadas.",
@@ -300,6 +315,7 @@ public class OrdenRestController extends BaseRestController {
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
 	})
 	@PostMapping(value = "/{orderNumber}/cierre", produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
 	public ResponseEntity<?> cerrar(@PathVariable Integer orderNumber) {
 		String actor = getUserLogged().getUsername();
 		try {
@@ -324,13 +340,15 @@ public class OrdenRestController extends BaseRestController {
 					+ "exista y este en estado 3. productoCargadoKg es la ultima masa acumulada ACEPTADA (no el "
 					+ "preset); ultimaTemperaturaC/ultimaDensidad/ultimoCaudalKgH son los ULTIMOS VALORES del "
 					+ "snapshot de telemetria, no promedios (TP19, diferido). Una diferenciaKg distinta de 0 no "
-					+ "causa ningun rechazo. Requiere autenticacion JWT.")
+					+ "causa ningun rechazo. Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Pesaje final registrado, orden en estado 4, conciliacion incluida.",
 					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000}"))),
 			@ApiResponse(responseCode = "400", description = "pesoBrutoKg ausente, no positivo, o con mas de 3 decimales/12 enteros.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"pesoBrutoKg: must be greater than 0\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 3 (incluye pesaje final repetido).",
@@ -340,6 +358,7 @@ public class OrdenRestController extends BaseRestController {
 	})
 	@PostMapping(value = "/{orderNumber}/pesaje-final", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
 	public ResponseEntity<?> pesajeFinal(@PathVariable Integer orderNumber,
 			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
 					content = @Content(examples = @ExampleObject(value = "{\"pesoBrutoKg\":16080.000}")))
@@ -362,11 +381,13 @@ public class OrdenRestController extends BaseRestController {
 	@Operation(summary = "Consultar la conciliacion (solo estado 4)",
 			description = "Devuelve la misma conciliacion calculada por el pesaje final (TP17), sin escrituras. "
 					+ "Requiere que la orden exista y este en estado 4; se puede llamar repetidas veces. "
-					+ "Requiere autenticacion JWT.")
+					+ "Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Conciliacion de una orden en estado 4.",
 					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 4.",
@@ -375,6 +396,7 @@ public class OrdenRestController extends BaseRestController {
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
 	})
 	@GetMapping(value = "/{orderNumber}/conciliacion", produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
 	public ResponseEntity<?> conciliacion(@PathVariable Integer orderNumber) {
 		try {
 			Conciliacion conciliacion = ordenBusiness.consultarConciliacion(orderNumber);
@@ -408,5 +430,17 @@ public class OrdenRestController extends BaseRestController {
 	public ResponseEntity<?> handleJsonInvalido(HttpMessageNotReadableException e) {
 		return new ResponseEntity<>(response.build(HttpStatus.BAD_REQUEST, null, "JSON de entrada invalido o malformado"),
 				HttpStatus.BAD_REQUEST);
+	}
+
+	// Mismo motivo que los dos @ExceptionHandler anteriores (ver Javadoc de la
+	// clase): sin este handler local, AccessDeniedException (lanzada por
+	// @PreAuthorize antes de llegar al metodo) termina en el forward interno a
+	// /error, que no esta en la lista de rutas publicas y vuelve 401 en vez de
+	// 403 (TP27, hallazgo de esta unidad). ex=null a proposito.
+	@ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+	public ResponseEntity<?> handleAccesoDenegado(org.springframework.security.access.AccessDeniedException e) {
+		return new ResponseEntity<>(
+				response.build(HttpStatus.FORBIDDEN, null, "No tiene los permisos necesarios para esta operacion"),
+				HttpStatus.FORBIDDEN);
 	}
 }

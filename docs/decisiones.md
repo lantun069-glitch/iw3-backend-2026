@@ -938,3 +938,54 @@ acuerdo vigente en este punto del proyecto, antes de abrir F5.
 - Esta entrada **no** ejecuta ningún merge, push ni cambio de rama: la
   rama de trabajo actual sigue siendo `feature/f4-cierre-conciliacion`,
   todavía sin PR a `develop`.
+
+## F6 — roles y permisos (TP27, primera unidad)
+
+Detalle completo del contrato, la matriz de permisos y la evidencia de
+verificación en `docs/contrato-f6-roles-permisos.md`. Aquí solo las
+decisiones y su origen.
+
+- Roles `ROLE_OPERADOR`/`ROLE_SUPERVISOR` y el mapeo operación→rol
+  (recepción solo `ROLE_SUPERVISOR`; tara/activación/lecturas/cierre/
+  pesaje-final/conciliación-consulta con cualquiera de los dos) son
+  **DECISIÓN DEL EQUIPO**, aprobada explícitamente por el usuario en
+  esta unidad. T2 solo exige "roles de usuario que regulen el consumo
+  de la API" (TP27), sin nombrar roles ni mapear operaciones — no es
+  una exigencia textual de cátedra, y `CLAUDE.md` (instrucción local
+  del equipo) ya advertía no presentar nombres de rol como impuestos
+  por el profesor.
+- Se usó `hasAuthority`/`hasAnyAuthority` en vez de `hasRole`, a
+  propósito, para no repetir el patrón `hasRole('ROLE_ADMIN')` de los
+  controladores de ejemplo del profesor (`AuthtestRestController`,
+  `MailRestController`), que exige en realidad la autoridad
+  `ROLE_ROLE_ADMIN` por el doble prefijo que agrega `hasRole`. No se
+  modificó ese código de ejemplo (fuera de alcance de esta unidad).
+- **Hallazgo:** `@PreAuthorize` denegado devolvía 401 en vez de 403,
+  por el mismo bug de forward a `/error` ya documentado para
+  `MethodArgumentNotValidException` (400→401) en la unidad de F2 — acá
+  aplicado a `AccessDeniedException` (403→401). Mismo motivo, misma
+  corrección: un `@ExceptionHandler(AccessDeniedException.class)`
+  local a `OrdenRestController`, sin tocar `SecurityConfiguration` ni
+  agregar `/error` a las rutas públicas (se había descartado esa
+  opción la vez anterior, por el mismo motivo: ampliar una ruta pública
+  de toda la aplicación por un problema de un controlador, y exponer
+  sin autenticación el cuerpo de error por defecto de Spring Boot).
+- Usuarios de prueba: mismo procedimiento manual de F1 (rol + usuario +
+  relación insertados a mano, ver `docs/desarrollo-local.md`), pero el
+  hash BCrypt se generó con un programa Java de un solo uso en vez de
+  `GET /demo/encodepass`, para no exponer la contraseña en una URL HTTP
+  ni en ningún log. Las contraseñas se generaron al azar, se
+  regeneraron una vez durante la sesión (la primera generación quedó
+  expuesta en la salida de una herramienta, corregido de inmediato por
+  pedido del usuario) y quedan únicamente en `.env.testroles`
+  (gitignored, permisos `600`). El usuario `qa_f1_dfab890c` de F1 no se
+  modificó ni se le agregó ningún rol nuevo, por instrucción explícita.
+- Consecuencia para las colecciones Postman de F2–F5: a partir de esta
+  unidad necesitan un usuario con `ROLE_SUPERVISOR` en
+  `testUsername`/`testPassword` (`qa_f1_dfab890c` deja de alcanzar).
+  Se verificó corriendo de nuevo la colección del runner de F5 con las
+  credenciales del usuario `ROLE_SUPERVISOR` nuevo: 34/34 aserciones
+  OK, sin modificar el archivo de la colección.
+- Esta entrada queda sin commit/push/merge, en la rama
+  `feature/f6-roles-permisos` (creada desde `develop` en `a264ada`),
+  por instrucción explícita de la sesión.

@@ -151,6 +151,25 @@ La contraseña quedó solo en `.env.testuser`. No incluir contraseñas, hashes n
 JWT en capturas o documentación. La utilidad de hash usa GET: reservarla al
 entorno local de prueba y evitar registrar su URL con la contraseña.
 
+### 5.1. Usuarios de prueba por rol (F6, TP27)
+
+Mismo procedimiento (rol + usuario + relación insertados a mano), con
+una variante: el hash BCrypt se generó con un programa Java de un solo
+uso (`BCryptPasswordEncoder`, reutilizando dependencias ya presentes en
+el proyecto — `spring-security-crypto` y `mysql-connector-j`, sin
+instalar nada nuevo) en vez de `GET /demo/encodepass`, para no exponer
+la contraseña en texto plano en la URL de una petición HTTP. El
+programa lee usuario/clave desde un archivo local (no desde argumentos
+de línea de comandos ni variables impresas) e inserta directamente con
+JDBC; no imprime contraseñas ni hashes.
+
+Tres usuarios nuevos: uno con únicamente `ROLE_OPERADOR`, uno con
+únicamente `ROLE_SUPERVISOR`, uno sin ningún rol asignado (fila
+`userroles` vacía). Credenciales en `.env.testroles` (gitignored,
+permisos `600`), no en `.env.testuser` (que sigue siendo del usuario de
+F1, sin modificar). Detalle de la matriz de permisos y la verificación
+en `docs/contrato-f6-roles-permisos.md`.
+
 Login: `POST /api/v1/login`, cuerpo de formulario con `username` y `password`.
 Respuesta correcta: HTTP 200 y JWT en el cuerpo. Para el recurso protegido,
 enviar `Authorization: Bearer <token>` a `GET /api/v1/products`.

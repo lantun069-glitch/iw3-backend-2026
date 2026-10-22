@@ -926,10 +926,26 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F6.
 - Criterio de aceptación: matriz de permisos por operación, con pruebas
   de acceso permitido/denegado por rol.
-- Estado: pendiente. Implementación: —. Evidencia: las entidades `User` y
-  `Role` (con `UserDetails` de Spring Security) ya existen en la base
-  heredada y son reutilizables directamente, sin modelo nuevo (ver
-  `docs/estado-proyecto.md`).
+- Estado: **verificado** (alcance de esta primera unidad de F6: las 7
+  operaciones del circuito ya implementadas; no cubre TP28/TP29, que
+  seguiran usando los mismos roles pero se implementan en una unidad
+  posterior). Implementación: `@PreAuthorize("hasAuthority('ROLE_SUPERVISOR')")`
+  en `recibir()`; `@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")`
+  en `registrarTara/activar/registrarLectura/cerrar/pesajeFinal/conciliacion`
+  (`OrdenRestController`); nuevo `@ExceptionHandler(AccessDeniedException.class)`
+  local al mismo controlador (hallazgo de esta unidad: sin este handler,
+  el 403 de `@PreAuthorize` terminaba en 401 por el mismo bug de forward
+  a `/error` ya documentado para 400 — ver `docs/contrato-f6-roles-permisos.md`
+  y `docs/decisiones.md`). Las entidades `User`/`Role` (con `UserDetails`
+  de Spring Security) ya existían en la base heredada y se reutilizaron
+  sin modelo nuevo, tal como se había anticipado.
+  Evidencia: matriz completa, hallazgo del bug 403→401 y su corrección,
+  y resultado de verificación (30/30 por curl, 33/33 por la colección
+  Postman nueva `postman/iw3-f6-roles-permisos.postman_collection.json`,
+  34/34 de regresión en la colección ya verificada del runner F5 con el
+  usuario `ROLE_SUPERVISOR` nuevo) en `docs/contrato-f6-roles-permisos.md`.
+  Nombres de rol (`ROLE_OPERADOR`/`ROLE_SUPERVISOR`) y el mapeo
+  operación→rol son DECISIÓN DEL EQUIPO, no texto literal de la fuente.
 
 ### TP28 — Alarma de temperatura configurable
 - Descripción: umbral de temperatura y destinatarios configurables;
