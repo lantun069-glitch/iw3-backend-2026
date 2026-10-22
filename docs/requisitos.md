@@ -28,16 +28,20 @@ la alternativa admitida para el parcial —últimos valores, no
 promedios— sí quedó cubierta en la conciliación); TP20 y TP21 están
 **verificados** (los cinco timestamps, las cuatro transiciones del
 circuito y, al cierre de F4, la matriz de saltos/retrocesos entre
-estados); TP22 y TP25 están **verificados** para la primera unidad de
-F5 (runner del circuito completo, rama `feature/f5-preparacion-parcial`,
-**F5 sigue abierta**: falta la revisión integral de TP23/TP24 y el
-ensayo de TP26); TP23 y TP24 (OpenAPI y Postman) están **en curso**,
-verificados para recepción+tara+activación+lecturas+cierre+pesaje
-final/conciliación, pendientes de la revisión integral de esta fase; el
-resto de los requisitos funcionales (TP01, TP26 en adelante) sigue
-**pendiente**, porque las fases que les corresponden (F6, o el cierre
-del segundo parcial) todavía no empezaron. TP36, de preparación
-para la defensa, está en curso; todavía no se practicaron las preguntas.
+estados); TP22 y TP25 están **verificados** para el runner del circuito
+completo (rama `feature/f5-preparacion-parcial`), con evidencia de
+Postman CLI más una ejecución guiada individual en Postman Desktop el
+22/10 (ver fila TP25); TP23 y TP24 (OpenAPI y Postman) están
+**verificados para el alcance del segundo parcial** (los siete
+endpoints de dominio existentes al cierre de F4/F5, documentados y
+coincidentes con el comportamiento real; siete colecciones sin huecos
+ni secretos) — queda pendiente su **ampliación para el final** (roles,
+alarmas, configuración); **F5 sigue abierta**: falta únicamente TP26
+(defensa/repaso individual y ensayo del equipo); el resto de los
+requisitos funcionales (TP01, TP27 en adelante) sigue **pendiente**,
+porque las fases que les corresponden (F6, o el cierre del segundo
+parcial) todavía no empezaron. TP36, de preparación para la defensa,
+está en curso; todavía no se practicaron las preguntas.
 De las filas de equipo/infraestructura (EQ), EQ01 y EQ02 están en curso
 y EQ03 está verificado.
 
@@ -878,6 +882,18 @@ y descarte de lecturas: `docs/fuentes.md`.
   (6 requests totales, 5 pasos omitidos por iteración). Detalle
   completo en `docs/contrato-f5-runner.md`.
 
+  **Evidencia adicional (22/10/2026):** ejecución guiada individual del
+  usuario en Postman Desktop (no Postman CLI), una iteración sobre la
+  misma colección — **9 requests, 34 aserciones, 0 fallos**, orden
+  `678233769`. Conciliación resultante: tara 12000 kg, bruto 16080 kg,
+  neto 4080 kg, masa acumulada (producto cargado) 4000 kg, diferencia
+  +80 kg — coherente con la fórmula neto = bruto − tara y diferencia =
+  neto − masa acumulada ya verificada en F4. Esta corrida confirma el
+  runner en un entorno distinto al de la verificación original (cliente
+  gráfico en vez de CLI), pero sigue siendo una ejecución guiada por el
+  usuario, no automatizada en CI; defensa y repaso del código del
+  runner quedan pendientes (ver TP26).
+
 ### TP26 — Presentación de 15-20 min con preguntas individuales
 - Descripción: presentación operativa del circuito el día de la entrega,
   con preguntas individuales a cada integrante.
@@ -892,7 +908,14 @@ y descarte de lecturas: `docs/fuentes.md`.
 - DATO FALTANTE: la fecha real de entrega 2026. T1 menciona "martes 11 de
   noviembre de 25" (2025); esa fecha corresponde a la cursada anterior
   (el audio es de 2025, reutilizado como material), no a este ciclo.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+  Esta ausencia de fecha no bloquea preparar el requisito: no impide
+  practicar la defensa ni ensayar el circuito con el equipo.
+- Estado: pendiente. Falta: (a) defensa y repaso del código por cada
+  integrante — incluido el runner de TP22/TP25, ejecutado hasta ahora
+  solo de forma guiada e individual — y (b) un ensayo cronometrado con
+  todo el equipo presente, entorno funcionando de punta a punta y
+  preguntas cruzadas. Ninguna de las dos tareas requiere conocer la
+  fecha de entrega para empezar. Implementación: —. Evidencia: —.
 
 ### TP27 — Roles que regulan el consumo de la API
 - Descripción: roles de usuario que habilitan o restringen operaciones

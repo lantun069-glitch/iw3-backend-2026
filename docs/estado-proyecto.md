@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Último checkpoint: [`2026-10-21-04.md`](checkpoints/2026-10-21-04.md).
+Último checkpoint: [`2026-10-22-01.md`](checkpoints/2026-10-22-01.md).
 Fase activa: **F3 cerrada para el alcance del segundo parcial** (tara,
 activación, descarte, snapshot e histórico — TP08–TP13). **F4** (cierre
 de carga, pesaje final, conciliación) **queda pendiente de iniciar.**
@@ -1042,9 +1042,65 @@ porque no agrega ninguna regla de negocio nueva.
 - `docs/contrato-f5-runner.md` (nuevo), `docs/requisitos.md`, este
   archivo.
 
-**F5 sigue abierta.** TP22 y TP25 quedan verificados; falta la
-revisión integral de TP23/TP24 (Swagger completo, colección Postman
-sin secretos y datos de ejemplo reproducibles sobre *todas* las
-colecciones) y el ensayo de TP26 (no bloqueado por desconocer la fecha
-real de entrega — su *programación* depende de acordar cuándo
-hacerlo, no de ese dato faltante).
+## F5 — segunda unidad: revisión integral de TP23/TP24
+
+**Alcance:** revisión integral de Swagger (TP23) y de las colecciones
+Postman existentes (TP24) sobre los siete endpoints de dominio ya
+implementados al cierre de F4/F5 (recepción, tara, activación,
+lecturas, cierre, pesaje final, conciliación). Commit `d11e993` en
+`feature/f5-preparacion-parcial`.
+
+**Resumen:** se agregó
+`@io.swagger.v3.oas.annotations.parameters.RequestBody` con ejemplo a
+los cuatro endpoints que no lo tenían (`tara`, `activacion`,
+`lecturas`, `pesaje-final`), siguiendo el mismo patrón ya usado en
+`recibir()`. Sin cambios de lógica ni de DTOs. Verificado contra
+`GET /v3/api-docs` con la app corriendo: los cuatro ejemplos aparecen
+correctamente, sin afectar el de `recibir()`. Se revisaron además las
+siete colecciones Postman existentes (`grep` sobre `postman/`): sin
+secretos ni tokens reales, variables documentadas, datos de ejemplo
+reproducibles. Detalle completo de la implementación y la evidencia en
+`docs/requisitos.md`, filas TP23 y TP24.
+
+**Resultado:** TP23 y TP24 pasan a **verificados para el alcance del
+segundo parcial**. La ampliación de ambos para el final (lo que
+agreguen roles, alarmas y configuración en F6) queda explícitamente
+pendiente, no se declara cumplida.
+
+**Nota de proceso — checkpoint de esta unidad:** esta unidad no generó
+un archivo de checkpoint propio en `docs/checkpoints/`; fue una
+decisión acordada con el usuario (unidad breve y acotada, documentada
+directamente en el mensaje del commit `d11e993` y en las filas de
+`docs/requisitos.md`), no un incumplimiento del protocolo de la
+sección 10 de `CLAUDE.md`. Queda consolidada retroactivamente en el
+checkpoint de esta entrada.
+
+## F5 — evidencia adicional del runner (Postman Desktop, 22/10/2026)
+
+Ejecución guiada individual del usuario, con Postman Desktop (no
+Postman CLI), sobre `postman/iw3-f5-runner-circuito.postman_collection.json`:
+**9 requests, 34 aserciones, 0 fallos**, una iteración, orden
+`678233769`. Conciliación resultante: tara 12000 kg, bruto 16080 kg,
+neto 4080 kg, masa acumulada (producto cargado) 4000 kg, diferencia
++80 kg — coherente con la fórmula ya verificada en F4. Confirma el
+runner en un cliente gráfico distinto al usado en la verificación
+original (CLI), pero sigue siendo una ejecución guiada e individual,
+no automatizada en CI. Detalle en `docs/requisitos.md`, fila TP25.
+Defensa y repaso del código del runner por el equipo quedan
+pendientes (TP26).
+
+**F5 sigue abierta.** TP22, TP23, TP24 y TP25 quedan verificados para
+el alcance del segundo parcial (con la ampliación de TP23/TP24 para el
+final explícitamente pendiente). Falta únicamente el ensayo de TP26
+(defensa/repaso individual del código, incluido el del runner, más un
+ensayo cronometrado con todo el equipo) — no bloqueado por desconocer
+la fecha real de entrega; su *programación* depende de acordar cuándo
+hacerlo, no de ese dato faltante.
+
+**Próximo paso (fuera de esta sesión):** preparar la entrega
+reproducible (build, variables, colecciones) y verificar el despliegue
+en la VM junto con el usuario — sin que esta sesión acceda a la VM ni
+modifique Nginx, certificados o configuración de despliegue. La
+integración `feature/f5-preparacion-parcial` → `develop` → `main`
+queda pendiente hasta verificar esa entrega; no se hace merge por
+cerrar una sesión.
