@@ -1096,6 +1096,22 @@ y descarte de lecturas: `docs/fuentes.md`.
   con el flujo ya definido en `CLAUDE.md`, sección 4— sino su
   confirmación operativa para este punto del proyecto, sin cambios de
   rama todavía.
+  **Primera integración real (22/10/2026):** cadena
+  `feature/setup-inicial` → `feature/f2-recepcion-ordenes` →
+  `feature/f3-tara-activacion` → `feature/f4-cierre-conciliacion` →
+  `feature/f5-preparacion-parcial` verificada como ancestría lineal
+  sobre `develop`/`main` (mismo punto de partida `d8f4c72`, sin
+  commits divergentes). Integración realizada con `git merge
+  --ff-only` (fast-forward, sin commit de merge ni duplicación) en vez
+  de una PR abierta en la interfaz de GitHub — autorizada
+  explícitamente por el usuario para esta operación puntual, dado que
+  la cadena ya había sido revisada unidad por unidad en los
+  checkpoints previos. `develop` y `main` quedaron ambos en `45710e3`,
+  publicados en `origin`. Se creó la etiqueta anotada
+  `parcial-2-local-v1` sobre `main` (también publicada), marcando la
+  versión funcional local del segundo parcial — el despliegue en VM
+  queda pendiente (ver `docs/estado-proyecto.md`). `develop` queda
+  activa y sin cambios pendientes tras la operación.
 
 ### EQ02 — Simplicidad y decisiones trazables
 - Descripción: cada cambio no trivial tiene una fuente citada o una
