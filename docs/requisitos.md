@@ -606,14 +606,47 @@ y descarte de lecturas: `docs/fuentes.md`.
   detalle conocido; si no hay muestras almacenadas, la ausencia de
   promedio se documenta explícitamente, no se devuelve 0 como si fuera un
   promedio real.
-- Estado: pendiente, promedios en sí **diferidos explícitamente a F6**
-  (no adelantados en esta unidad). La alternativa admitida para el
-  parcial (último valor recibido en vez de promedio) **sí** quedó
-  cubierta en esta unidad: la conciliación expone
-  `ultimaTemperaturaC`/`ultimaDensidad`/`ultimoCaudalKgH`, nombrados
-  explícitamente como últimos valores, no como promedios — ver
-  `docs/contrato-f4-pesaje-conciliacion.md`. Implementación: —
-  (promedio real, sin implementar). Evidencia: —.
+- Estado: **verificado**. La fuente ya resuelve explícitamente qué
+  lecturas integran el promedio: "según los datos almacenados" (T1) —
+  es el histórico almacenado (`DetalleCarga`), no todas las lecturas
+  aceptadas recibidas, que desde TP14 puede ser un conjunto más grande
+  si la orden configuró `detalleIntervaloSegundos` (histórico
+  muestreado). Implementación: `EstadisticasDetalle` (nuevo) +
+  `DetalleCargaRepository.calcularEstadisticas` (`SUM`+`COUNT`, no
+  `AVG`, para no perder precisión por la conversión a `Double` que
+  especifica JPA para `AVG`); división `BigDecimal` en
+  `OrdenBusiness.calcularConciliacion` con escala fija por campo
+  (temperatura 2 decimales, densidad 4, caudal 3) y
+  `RoundingMode.HALF_UP`, redondeando solo el resultado final;
+  `null` si no hay ninguna fila de detalle (nunca `0`). Promedio
+  aritmético simple, no ponderado por tiempo, y promedios agregados
+  sin reemplazar los últimos valores existentes: DECISIÓN DEL EQUIPO
+  (detalle completo en `docs/contrato-f6-promedios-historico.md`).
+  Evidencia: los cuatro casos acordados, cubiertos. (1) Orden sin
+  intervalo (histórico == todas las aceptadas): promedio =
+  15.00/0.5500/1500.000, último valor = 20.00/0.6000/2000.000
+  (distinto). (2) Orden con intervalo=5s (histórico muestreado, 3
+  lecturas aceptadas, 2 guardadas): promedio = 17.83/0.5228/3000.000
+  (los dos primeros requirieron redondeo HALF_UP), último valor =
+  15.55 (distinto), y si el promedio incluyera la lectura excluida
+  sería ≈45.21 (muy distinto). (3) Mismo promedio en la respuesta de
+  pesaje-final y en el GET posterior, para ambas órdenes. (4)
+  Verificación por SQL directo (no solo por HTTP): `SUM`/`COUNT` sobre
+  `detalles_carga` confirma 2 filas en cada orden, y para la orden con
+  intervalo confirma que la lectura excluida (99.99) no está entre
+  ellas. Protección adicional, no uno de los cuatro casos y no
+  ejercitada: sin ninguna fila de detalle (`COUNT=0`) los promedios
+  quedan en `null`, no probado porque es inalcanzable por el circuito
+  normal (`cerrarCarga` exige al menos una lectura aceptada, y la
+  primera lectura aceptada de toda orden siempre genera detalle).
+  Colección Postman acotada
+  `postman/iw3-f6-promedios-historico.postman_collection.json` (17
+  requests, 2 circuitos completos) corrida una vez: 17/17 requests,
+  27/27 aserciones, 0 fallos — limitada a lo observable por HTTP; el
+  caso 4 (SQL) se verificó por separado, no repetido por la colección.
+  La alternativa admitida para el parcial (último valor en vez de
+  promedio) sigue cubierta desde F4: ver
+  `docs/contrato-f4-pesaje-conciliacion.md`.
 
 ### TP20 — Timestamps de cada evento del ciclo
 - Descripción: fecha/hora de recepción inicial, de pesaje inicial, de

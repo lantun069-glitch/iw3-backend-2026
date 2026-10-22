@@ -1237,3 +1237,53 @@ tag `parcial-2-local-v1` no se tocaron.
 (TP19 promedios o TP28/TP29 alarmas) antes de implementarla, y evaluar
 la integración `feature/f6-frecuencia-historico` → `develop` cuando se
 autorice.
+
+## F6 — tercera unidad: promedios de temperatura, densidad y caudal (TP19)
+
+**Alcance:** promedio de temperatura, densidad y caudal sobre el
+histórico almacenado de la orden, incluido en la conciliación. No
+agrega alarmas (TP28/TP29). Rama `feature/f6-promedios`, creada desde
+`develop` en `e5dbec3`.
+
+**Resumen:** la fuente ya resuelve qué lecturas integran el promedio
+("según los datos almacenados", T1): es el histórico almacenado
+(`DetalleCarga`), no todas las lecturas aceptadas — con TP14 pueden
+ser conjuntos distintos. Se agregan `promedioTemperaturaC`/
+`promedioDensidad`/`promedioCaudalKgH` a la conciliación, sin quitar
+los últimos valores existentes. Cálculo compartido entre pesaje final
+y consulta posterior, sin persistir el promedio. `SUM`+`COUNT` (no
+`AVG`, que JPA especifica siempre como `Double`) y división
+`BigDecimal` con escala fija por campo y `HALF_UP` sobre el resultado
+final. Detalle completo en
+`docs/contrato-f6-promedios-historico.md`.
+
+**Verificación:** compilación limpia; los 4 casos acordados,
+cubiertos: (1) orden sin intervalo (histórico == todas las
+aceptadas) con promedio 15.00/0.5500/1500.000 distinto del último
+valor 20.00/0.6000/2000.000; (2) orden con intervalo=5s (histórico
+muestreado) con promedio 17.83/0.5228/3000.000 (dos de los tres con
+redondeo HALF_UP), distinto del último valor (15.55) y de lo que
+daría el promedio de todas las aceptadas (≈45.21 si incluyera la
+lectura excluida); (3) mismo promedio en pesaje-final y en el GET
+posterior; (4) verificación por SQL directo (`SUM`/`COUNT` sobre
+`detalles_carga`, no solo por HTTP) para los casos 1 y 2. Protección
+adicional del código, no uno de los cuatro casos y no ejercitada: sin
+ninguna fila de detalle los promedios quedan en `null`, no probada
+porque es inalcanzable por el circuito normal. Colección Postman
+acotada `postman/iw3-f6-promedios-historico.postman_collection.json`
+(17 requests) corrida una vez: 17/17 requests, 27/27 aserciones, 0
+fallos.
+
+**Documentos actualizados:**
+`docs/contrato-f6-promedios-historico.md` (nuevo),
+`postman/iw3-f6-promedios-historico.postman_collection.json` (nuevo),
+`docs/requisitos.md` (TP19), `docs/decisiones.md`, `docs/defensa.md`,
+`OrdenRestController`/`Conciliacion`/`ConciliacionResponse` (OpenAPI y
+DTOs), este archivo.
+
+**Sin commit/push/merge** en esta unidad, por instrucción explícita.
+`main`, `develop` y el tag `parcial-2-local-v1` no se tocaron.
+
+**Próximo paso:** acordar con el usuario si F6 continúa con TP28/TP29
+(alarmas) o se considera suficiente para esta fase, y evaluar la
+integración `feature/f6-promedios` → `develop` cuando se autorice.

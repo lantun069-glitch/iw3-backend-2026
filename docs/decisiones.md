@@ -1022,3 +1022,46 @@ su origen.
 - Esta entrada queda sin commit/push/merge, en la rama
   `feature/f6-frecuencia-historico` (creada desde `develop` en
   `e1bacb4`), por instrucción explícita de la sesión.
+
+## F6 — promedios de temperatura, densidad y caudal (TP19)
+
+Detalle completo, matriz de casos y evidencia en
+`docs/contrato-f6-promedios-historico.md`. Aquí solo las decisiones y
+su origen.
+
+- Qué lecturas integran el promedio: **no es una duda abierta**. T1
+  dice explícitamente "según los datos almacenados" — es el histórico
+  almacenado (`DetalleCarga`), no todas las lecturas aceptadas
+  recibidas, que desde TP14 puede ser un conjunto mayor si la orden
+  configuró intervalo. No se consultó NotebookLM: la fuente ya
+  registrada resolvía el punto concreto.
+- Promedio aritmético simple, sin ponderar por tiempo; agregar los
+  campos de promedio sin reemplazar los últimos valores existentes;
+  escala de salida fija por campo (temperatura 2, densidad 4, caudal
+  3 decimales) con `RoundingMode.HALF_UP` sobre el resultado final
+  únicamente: **DECISIÓN DEL EQUIPO**, aprobada explícitamente por el
+  usuario.
+- `SUM`+`COUNT` en vez de `AVG`: la especificación JPA define que
+  `AVG` siempre devuelve `Double`, sin importar el tipo de la columna
+  de origen — usar `AVG` sobre columnas `BigDecimal` perdería
+  precisión por esa conversión. `SUM` sobre una columna `BigDecimal`
+  sí preserva `BigDecimal` (misma especificación), y la división final
+  se hace en Java con `BigDecimal.divide(...)`, con control explícito
+  de escala y redondeo.
+- Promedio no persistido, calculado en vivo: mismo criterio ya usado
+  para el resto de `Conciliacion`/`calcularConciliacion`.
+- Los cuatro casos acordados (orden sin intervalo, orden con intervalo
+  configurado/histórico muestreado, igualdad entre pesaje-final y GET
+  posterior, verificación por SQL directo) se ejecutaron los cuatro —
+  detalle y evidencia en `docs/contrato-f6-promedios-historico.md`.
+- Caso sin ninguna muestra almacenada: **no es uno de los cuatro
+  casos anteriores**, es una protección adicional del código (`null`,
+  nunca `0`) que no se ejecutó como prueba, porque es inalcanzable por
+  el circuito normal — `cerrarCarga` ya exige al menos una lectura
+  aceptada, y la primera lectura aceptada de toda orden siempre genera
+  una fila de detalle (regla de TP14). Se documenta esta imposibilidad
+  en vez de forzar un escenario artificial manipulando la base
+  directamente.
+- Esta entrada queda sin commit/push/merge, en la rama
+  `feature/f6-promedios` (creada desde `develop` en `e5dbec3`), por
+  instrucción explícita de la sesión.

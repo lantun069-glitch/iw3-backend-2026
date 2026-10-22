@@ -335,3 +335,40 @@ Detalle completo: `docs/decisiones.md`, sección "F4 — cierre".
      del equipo, no una exigencia de la fuente: la fuente ya describe
      que la mayoría de las lecturas recibidas no se guardan: forzar la
      última porque es la última no hacía falta para cumplir eso.)
+
+## F6 — tercera unidad: promedios de temperatura, densidad y caudal (TP19)
+
+- **Qué hace:** agrega `promedioTemperaturaC`/`promedioDensidad`/
+  `promedioCaudalKgH` a la conciliación, calculados sobre el histórico
+  almacenado (`DetalleCarga`) de la orden, sin reemplazar los últimos
+  valores existentes.
+- **Por qué:** la fuente dice explícitamente "el promedio... según
+  los datos almacenados" — no es ambiguo sobre qué conjunto de
+  lecturas promediar.
+- **Concepto de clase:** por qué `AVG` de JPQL no sirve para esto —
+  la especificación JPA define que `AVG` siempre devuelve `Double`,
+  sin importar el tipo de columna de origen, lo que puede perder
+  precisión en columnas `BigDecimal`; `SUM`+`COUNT`+división
+  `BigDecimal` explícita evita ese problema.
+- **Cómo comprobarlo:** una orden con intervalo configurado, con una
+  lectura intermedia que queda fuera del histórico (actualiza el
+  snapshot pero no genera detalle): el promedio resultante ignora esa
+  lectura, confirmado por consulta SQL directa sobre `detalles_carga`.
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué el promedio no es simplemente el promedio de todas las
+     lecturas que llegaron? (Porque la fuente pide el promedio "según
+     los datos almacenados", y desde que existe frecuencia
+     configurable (TP14) lo almacenado puede ser un subconjunto de lo
+     recibido — promediar sobre "lo recibido" sería un criterio
+     distinto al que pide la fuente.)
+  2. ¿Por qué no se usó `AVG` directamente en la consulta? (Porque la
+     especificación de JPA fija que `AVG` devuelve `Double` sin
+     importar el tipo de la columna original, lo que puede perder
+     precisión en una columna `BigDecimal`; se usó `SUM`+`COUNT` y una
+     división `BigDecimal` con escala y redondeo explícitos.)
+  3. ¿Qué pasa si una orden no tiene ninguna lectura guardada en el
+     histórico? (Los promedios quedan en `null`, nunca en `0` — pero
+     en la práctica esto no puede ocurrir para una orden que llegó a
+     estado 4 por el circuito normal, porque cerrar la carga ya exige
+     al menos una lectura aceptada, y la primera lectura aceptada de
+     toda orden siempre genera una fila de detalle.)

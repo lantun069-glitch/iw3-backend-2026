@@ -353,11 +353,15 @@ public class OrdenRestController extends BaseRestController {
 					+ "la conciliacion calculada en esa misma operacion (TP16/TP18). Requiere que la orden "
 					+ "exista y este en estado 3. productoCargadoKg es la ultima masa acumulada ACEPTADA (no el "
 					+ "preset); ultimaTemperaturaC/ultimaDensidad/ultimoCaudalKgH son los ULTIMOS VALORES del "
-					+ "snapshot de telemetria, no promedios (TP19, diferido). Una diferenciaKg distinta de 0 no "
+					+ "snapshot de telemetria, no promedios. promedioTemperaturaC/promedioDensidad/promedioCaudalKgH "
+					+ "(TP19, F6) son el promedio aritmetico simple sobre el detalle historico ALMACENADO de la "
+					+ "orden (DetalleCarga), no sobre todas las lecturas aceptadas recibidas (pueden ser mas si "
+					+ "la orden configuro detalleIntervaloSegundos, TP14); null si no hay ninguna fila de detalle "
+					+ "(no se devuelve 0). Una diferenciaKg distinta de 0 no "
 					+ "causa ningun rechazo. Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Pesaje final registrado, orden en estado 4, conciliacion incluida.",
-					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000}"))),
+					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000,\"promedioTemperaturaC\":17.80,\"promedioDensidad\":0.5380,\"promedioCaudalKgH\":2950.000}"))),
 			@ApiResponse(responseCode = "400", description = "pesoBrutoKg ausente, no positivo, o con mas de 3 decimales/12 enteros.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"pesoBrutoKg: must be greater than 0\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
@@ -394,11 +398,12 @@ public class OrdenRestController extends BaseRestController {
 
 	@Operation(summary = "Consultar la conciliacion (solo estado 4)",
 			description = "Devuelve la misma conciliacion calculada por el pesaje final (TP17), sin escrituras. "
-					+ "Requiere que la orden exista y este en estado 4; se puede llamar repetidas veces. "
+					+ "Requiere que la orden exista y este en estado 4; se puede llamar repetidas veces. Incluye "
+					+ "los promedios (TP19, F6), ver descripcion del pesaje final. "
 					+ "Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Conciliacion de una orden en estado 4.",
-					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000}"))),
+					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000,\"promedioTemperaturaC\":17.80,\"promedioDensidad\":0.5380,\"promedioCaudalKgH\":2950.000}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
 			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
@@ -429,7 +434,8 @@ public class OrdenRestController extends BaseRestController {
 	private ConciliacionResponse aConciliacionResponse(Conciliacion c) {
 		return new ConciliacionResponse(c.getOrderNumber(), c.getTaraKg(), c.getPesoBrutoKg(), c.getNetoKg(),
 				c.getProductoCargadoKg(), c.getDiferenciaKg(), c.getUltimaTemperaturaC(), c.getUltimaDensidad(),
-				c.getUltimoCaudalKgH());
+				c.getUltimoCaudalKgH(), c.getPromedioTemperaturaC(), c.getPromedioDensidad(),
+				c.getPromedioCaudalKgH());
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)

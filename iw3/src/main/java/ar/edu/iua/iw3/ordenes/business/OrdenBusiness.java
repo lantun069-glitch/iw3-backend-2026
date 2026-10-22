@@ -1,6 +1,7 @@
 package ar.edu.iua.iw3.ordenes.business;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -470,9 +471,31 @@ public class OrdenBusiness implements IOrdenBusiness {
 	private Conciliacion calcularConciliacion(Orden orden) {
 		BigDecimal netoKg = orden.getPesoBrutoKg().subtract(orden.getTaraKg());
 		BigDecimal diferenciaKg = netoKg.subtract(orden.getMasaAcumuladaKg());
+
+		// TP19: promedio aritmetico simple sobre el detalle ALMACENADO
+		// (no sobre todas las lecturas aceptadas, que puede ser un
+		// conjunto mas grande con TP14). SUM + COUNT, no AVG (ver
+		// EstadisticasDetalle); division BigDecimal explicita, con la
+		// escala de salida de cada campo y HALF_UP, redondeando solo el
+		// resultado final. cantidad=0 (teoricamente inalcanzable para
+		// una orden que llego a estado 3/4 por el circuito normal: la
+		// primera lectura aceptada siempre genera detalle, y cerrarCarga
+		// exige al menos una lectura aceptada) deja los tres promedios en
+		// null, nunca 0.
+		EstadisticasDetalle stats = detalleCargaDAO.calcularEstadisticas(orden);
+		BigDecimal promedioTemperaturaC = null;
+		BigDecimal promedioDensidad = null;
+		BigDecimal promedioCaudalKgH = null;
+		if (stats.getCantidad() != null && stats.getCantidad() > 0) {
+			BigDecimal cantidad = BigDecimal.valueOf(stats.getCantidad());
+			promedioTemperaturaC = stats.getSumaTemperaturaC().divide(cantidad, 2, RoundingMode.HALF_UP);
+			promedioDensidad = stats.getSumaDensidad().divide(cantidad, 4, RoundingMode.HALF_UP);
+			promedioCaudalKgH = stats.getSumaCaudalKgH().divide(cantidad, 3, RoundingMode.HALF_UP);
+		}
+
 		return new Conciliacion(orden.getOrderNumber(), orden.getTaraKg(), orden.getPesoBrutoKg(), netoKg,
 				orden.getMasaAcumuladaKg(), diferenciaKg, orden.getTemperaturaC(), orden.getDensidad(),
-				orden.getCaudalKgH());
+				orden.getCaudalKgH(), promedioTemperaturaC, promedioDensidad, promedioCaudalKgH);
 	}
 
 	private String causaMasEspecifica(Throwable e) {

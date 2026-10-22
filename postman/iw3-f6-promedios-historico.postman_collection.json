@@ -1,0 +1,920 @@
+{
+	"info": {
+		"name": "iw3 - F6 Promedios del historico (TP19)",
+		"description": "Verifica, por lo observable via HTTP, que el promedio de temperatura/densidad/caudal (TP19) se calcula sobre el detalle ALMACENADO (DetalleCarga) de la orden, no sobre todas las lecturas aceptadas recibidas -- distincion relevante desde que la frecuencia de persistencia es configurable (TP14, detalleIntervaloSegundos).\n\nFolder 1 (orden sin intervalo): el historico almacenado coincide con todas las lecturas aceptadas (todas se guardan), asi que sirve de caso de control simple: promedio == promedio de todas las aceptadas == 15.00/0.5500/1500.000, distinto del ultimo valor (20.00/0.6000/2000.000).\n\nFolder 2 (orden con intervalo = 1s): 3 lecturas aceptadas (A, B, C); B queda deliberadamente fuera del intervalo y NO se guarda en el historico (aunque si actualiza el snapshot). El promedio resultante (17.83/0.5228/3000.000, con redondeo HALF_UP en dos de los tres campos) es distinto tanto del ultimo valor (15.55, la lectura C) como de lo que daria el promedio de las 3 lecturas aceptadas (~45.21 de temperatura) -- los tres conceptos se distinguen con valores numericos diferentes a proposito. Usa una espera sincronica corta en el pre-request de la lectura C (sin infraestructura externa) para asegurar que paso el intervalo configurado.\n\nNo repite la verificacion de persistencia por SQL (filas de detalle, SUM/COUNT) ya hecha y documentada en docs/contrato-f6-promedios-historico.md: esta coleccion se limita a lo que la propia respuesta HTTP expone.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "00 - Login",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "{{testUsername}}",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "{{testPassword}}",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/login",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"login"
+					]
+				}
+			},
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"var base = Date.now() % 1000000000;",
+							"pm.collectionVariables.set('orderNumberSinIntervalo', String(base));",
+							"pm.collectionVariables.set('orderNumberConIntervalo', String(base + 1));",
+							"pm.collectionVariables.set('extSuffix', String(base));"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('login responde 200', function () { pm.response.to.have.status(200); });",
+							"pm.collectionVariables.set('jwtToken', pm.response.text());"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "TP19 - orden sin intervalo (muestreado == todas las aceptadas)",
+			"item": [
+				{
+					"name": "Recepcion sin intervalo -> 201",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"orderNumber\": {{orderNumberSinIntervalo}}, \"fechaCargaPrevista\": \"2026-11-03T08:30:00\", \"presetKg\": 10000.500, \"camion\": {\"externalCode\": \"CAM-TP19-{{extSuffix}}S\", \"patente\": \"TP19{{extSuffix}}S\", \"capacidadKg\": 12000.000}, \"chofer\": {\"externalCode\": \"CHO-TP19-{{extSuffix}}S\", \"nombre\": \"Test\", \"apellido\": \"TP19\"}, \"cliente\": {\"externalCode\": \"CLI-TP19-{{extSuffix}}S\", \"razonSocial\": \"Cliente TP19 {{extSuffix}}S\"}, \"producto\": {\"externalCode\": \"PRD-TP19-{{extSuffix}}S\", \"nombre\": \"GLP\"}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('201', function () { pm.response.to.have.status(201); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Tara -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberSinIntervalo}}/tara",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberSinIntervalo}}",
+								"tara"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"taraKg\": 12000.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });",
+									"pm.collectionVariables.set('claveSin', pm.response.json().claveActivacion);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Activacion -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberSinIntervalo}}/activacion",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberSinIntervalo}}",
+								"activacion"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"clave\": {{claveSin}}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Lectura 1 (temp 10.00) -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberSinIntervalo}}/lecturas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberSinIntervalo}}",
+								"lecturas"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"masaAcumuladaKg\": 1000.000, \"densidad\": 0.5000, \"temperaturaC\": 10.00, \"caudalKgH\": 1000.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200, aceptada', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().aceptada).to.be.true; });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Lectura 2 (temp 20.00) -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberSinIntervalo}}/lecturas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberSinIntervalo}}",
+								"lecturas"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"masaAcumuladaKg\": 2000.000, \"densidad\": 0.6000, \"temperaturaC\": 20.00, \"caudalKgH\": 2000.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200, aceptada', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().aceptada).to.be.true; });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Cierre -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberSinIntervalo}}/cierre",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberSinIntervalo}}",
+								"cierre"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Pesaje final -> promedio == todas las aceptadas (sin intervalo configurado)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberSinIntervalo}}/pesaje-final",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberSinIntervalo}}",
+								"pesaje-final"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"pesoBrutoKg\": 16080.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });",
+									"var body = pm.response.json();",
+									"pm.test('promedioTemperaturaC = 15 (avg de las 2 lecturas, ambas en el historico)', function () {",
+									"    pm.expect(body.promedioTemperaturaC).to.eql(15);",
+									"});",
+									"pm.test('ultimaTemperaturaC = 20 (ultimo valor, distinto del promedio)', function () {",
+									"    pm.expect(body.ultimaTemperaturaC).to.eql(20);",
+									"});",
+									"pm.test('promedioDensidad = 0.55, promedioCaudalKgH = 1500', function () {",
+									"    pm.expect(body.promedioDensidad).to.eql(0.55);",
+									"    pm.expect(body.promedioCaudalKgH).to.eql(1500);",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "TP19 - orden con intervalo (muestreado != todas las aceptadas, con redondeo)",
+			"item": [
+				{
+					"name": "Recepcion con intervalo = 1s -> 201",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"orderNumber\": {{orderNumberConIntervalo}}, \"fechaCargaPrevista\": \"2026-11-03T08:30:00\", \"presetKg\": 10000.500, \"detalleIntervaloSegundos\": 1, \"camion\": {\"externalCode\": \"CAM-TP19-{{extSuffix}}C\", \"patente\": \"TP19{{extSuffix}}C\", \"capacidadKg\": 12000.000}, \"chofer\": {\"externalCode\": \"CHO-TP19-{{extSuffix}}C\", \"nombre\": \"Test\", \"apellido\": \"TP19\"}, \"cliente\": {\"externalCode\": \"CLI-TP19-{{extSuffix}}C\", \"razonSocial\": \"Cliente TP19 {{extSuffix}}C\"}, \"producto\": {\"externalCode\": \"PRD-TP19-{{extSuffix}}C\", \"nombre\": \"GLP\"}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('201', function () { pm.response.to.have.status(201); });",
+									"pm.test('detalleIntervaloSegundos = 1', function () { pm.expect(pm.response.json().detalleIntervaloSegundos).to.eql(1); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Tara -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/tara",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"tara"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"taraKg\": 12000.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });",
+									"pm.collectionVariables.set('claveCon', pm.response.json().claveActivacion);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Activacion -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/activacion",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"activacion"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"clave\": {{claveCon}}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Lectura A (temp 20.10, primera: siempre se guarda en el historico) -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/lecturas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"lecturas"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"masaAcumuladaKg\": 1000.000, \"densidad\": 0.5100, \"temperaturaC\": 20.10, \"caudalKgH\": 3000.100}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200, aceptada', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().aceptada).to.be.true; });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Lectura B (temp 99.99, aceptada pero NO entra al historico por el intervalo) -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/lecturas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"lecturas"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"masaAcumuladaKg\": 1500.000, \"densidad\": 0.9999, \"temperaturaC\": 99.99, \"caudalKgH\": 5000.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200, aceptada (actualiza snapshot, no el historico)', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().aceptada).to.be.true; });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Lectura C (temp 15.55, pasado el intervalo: se guarda en el historico) -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/lecturas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"lecturas"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"masaAcumuladaKg\": 2000.000, \"densidad\": 0.5355, \"temperaturaC\": 15.55, \"caudalKgH\": 2999.900}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Espera sincronica corta (collection acotada, sin infraestructura externa):",
+									"// asegura que paso el intervalo de 1s configurado desde la lectura A antes de enviar esta.",
+									"var start = Date.now();",
+									"while (Date.now() - start < 1300) { /* espera deliberada */ }"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200, aceptada', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().aceptada).to.be.true; });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Cierre -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/cierre",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"cierre"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Pesaje final -> promedio del historico MUESTREADO, distinto del ultimo valor y de 'todas las aceptadas'",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/pesaje-final",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"pesaje-final"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"pesoBrutoKg\": 16080.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });",
+									"var body = pm.response.json();",
+									"pm.test('promedioTemperaturaC = 17.83 (avg de A y C unicamente, 20.10/15.55; redondeo 17.825->17.83 HALF_UP)', function () {",
+									"    pm.expect(body.promedioTemperaturaC).to.eql(17.83);",
+									"});",
+									"pm.test('promedioDensidad = 0.5228 (avg de A y C; redondeo 0.52275->0.5228 HALF_UP)', function () {",
+									"    pm.expect(body.promedioDensidad).to.eql(0.5228);",
+									"});",
+									"pm.test('promedioCaudalKgH = 3000', function () {",
+									"    pm.expect(body.promedioCaudalKgH).to.eql(3000);",
+									"});",
+									"pm.test('ultimaTemperaturaC = 15.55: distinto del promedio (17.83)', function () {",
+									"    pm.expect(body.ultimaTemperaturaC).to.eql(15.55);",
+									"    pm.expect(body.ultimaTemperaturaC).to.not.eql(body.promedioTemperaturaC);",
+									"});",
+									"pm.test('el promedio NO incluye la lectura B (99.99): si la incluyera, el promedio de 3 valores seria ~45.21, muy distinto de 17.83', function () {",
+									"    pm.expect(body.promedioTemperaturaC).to.be.below(20);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "GET conciliacion -> mismo promedio que el pesaje final (TP17, sin recalculo distinto)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberConIntervalo}}/conciliacion",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberConIntervalo}}",
+								"conciliacion"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200', function () { pm.response.to.have.status(200); });",
+									"pm.test('promedios identicos a los del pesaje final', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.promedioTemperaturaC).to.eql(17.83);",
+									"    pm.expect(body.promedioDensidad).to.eql(0.5228);",
+									"    pm.expect(body.promedioCaudalKgH).to.eql(3000);",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "testUsername",
+			"value": "",
+			"type": "string",
+			"description": "Usuario con ROLE_SUPERVISOR. Definir por --env-var. No versionar valores reales."
+		},
+		{
+			"key": "testPassword",
+			"value": "",
+			"type": "string",
+			"description": "NUNCA versionar un valor real aca."
+		},
+		{
+			"key": "jwtToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "orderNumberSinIntervalo",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "orderNumberConIntervalo",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "extSuffix",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "claveSin",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "claveCon",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
