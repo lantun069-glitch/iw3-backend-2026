@@ -22,11 +22,13 @@ confirmado explícitamente no adelantado en esta unidad; TP15 a TP18
 están **verificados**, incluida confirmación por consulta directa de
 BD ejecutada por el usuario para ambas unidades, para las dos unidades
 de F4 (cierre 2→3 y pesaje final 3→4 con conciliación, rama
-`feature/f4-cierre-conciliacion`); TP19 sigue **pendiente** (promedios
-diferidos a F6; la alternativa admitida para el parcial —últimos
-valores, no promedios— sí quedó cubierta en la conciliación); TP20 y
-TP21 están **verificados** (los cinco timestamps y las cuatro
-transiciones del circuito, incluido el pesaje final); TP23 y TP24
+`feature/f4-cierre-conciliacion`, **fase F4 cerrada para el alcance del
+segundo parcial**); TP19 sigue **pendiente** (promedios diferidos a F6;
+la alternativa admitida para el parcial —últimos valores, no
+promedios— sí quedó cubierta en la conciliación); TP20 y TP21 están
+**verificados** (los cinco timestamps, las cuatro transiciones del
+circuito y, al cierre de F4, la matriz de saltos/retrocesos entre
+estados); TP23 y TP24
 (OpenAPI y Postman) están **en curso**, verificados para
 recepción+tara+activación+lecturas+cierre+pesaje final/conciliación; el
 resto de los requisitos funcionales (TP01, TP22, TP25 en adelante) sigue
@@ -631,21 +633,31 @@ y descarte de lecturas: `docs/fuentes.md`.
   `estadoNuevo=1`, cada tara válida con `estadoNuevo=2`, cada cierre
   válido con `estadoNuevo=3`, cada pesaje final válido con
   `estadoNuevo=4`; `usuarioOProceso` = usuario autenticado (nunca del
-  JSON) en los cuatro casos. **Verificado por lectura directa de BD
-  para `estadoNuevo=3`** (ver TP15, órdenes 940556/950632/960632: una
-  sola fila por orden, sin duplicados) **y para `estadoNuevo=4`**
-  (ejecutada por el usuario para las cinco órdenes que llegaron a
-  pesaje final en esta unidad — 1792624398/399/400/402/403: exactamente
-  una fila por orden, sin duplicados, `usuarioOProceso=qa_f1_dfab890c`
-  en las cinco y `fecha_hora` idéntica a `fechaPesajeFinal` en cada una;
-  la orden 1792624401, que quedó en estado 1, no generó ninguna fila
-  con `estadoNuevo=4`, confirmado por el mismo `LEFT JOIN`). Detalle
-  completo en `docs/contrato-f4-pesaje-conciliacion.md`. **Sin
-  verificar todavía por esa vía:** el contenido exacto de
-  `usuarioOProceso` para `estadoNuevo=1`/`2` (recepción/tara), y la
-  matriz completa de saltos/retrocesos entre todos los pares de
-  estados — solo se ejercitaron casos representativos por unidad, no
-  cada combinación posible.
+  JSON) en los cuatro casos. **Verificado por lectura directa de BD**
+  para `estadoNuevo=1`/`2`/`3` (órdenes 940556/950632/960632, incluido
+  `usuarioOProceso=qa_f1_dfab890c` en los tres estados) **y para
+  `estadoNuevo=4`** (órdenes 1792624398/399/400/402/403: exactamente una
+  fila por orden, sin duplicados, mismo actor y `fecha_hora` idéntica a
+  `fechaPesajeFinal`; 1792624401, en estado 1, no generó ninguna fila
+  con `estadoNuevo=4`). Detalle completo en
+  `docs/contrato-f4-pesaje-conciliacion.md`.
+
+  **Matriz de saltos/retrocesos — completada en el cierre de F4:** las
+  ocho combinaciones (operación, estado inicial incompatible) que
+  quedaban sin ejercitar tras las dos unidades de F4 —
+  `registrarTara`/`activar` sobre estados 3 y 4, `registrarLectura`
+  sobre estados 1 y 4, `cerrarCarga` sobre estado 4 y
+  `registrarPesajeFinal` sobre estado 2 — se probaron con `curl` y
+  quedaron reproducibles en
+  `postman/iw3-f4-saltos-retrocesos.postman_collection.json` (25
+  requests, 26 aserciones, 0 fallos): las ocho respondieron `409` con
+  el mensaje de estado incompatible esperado (estado actual correcto en
+  cada mensaje) y `devInfo: "No stack trace"`, sin detalle interno.
+  **Límite conservado:** estos ocho rechazos se verificaron por HTTP y
+  por revisión de código (la excepción de estado se lanza antes de
+  cualquier `save()`, dentro de la misma transacción); **no** se
+  verificaron por lectura directa de BD. Detalle completo en
+  `docs/decisiones.md`, sección "F4 — cierre".
 
 ### TP22 — Sin interfaz gráfica para el segundo parcial
 - Descripción: los puntos 1 a 5 se entregan como API, sin ninguna
@@ -668,9 +680,10 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F5.
 - Criterio de aceptación: operaciones, esquemas, unidades y errores
   documentados coinciden con el comportamiento real de la API.
-- Estado: en curso (verificado para los cuatro endpoints de dominio que
-  existen hasta ahora — recepción de orden, tara, activación y
-  lecturas —; falta documentar los que se agreguen en F4 en adelante).
+- Estado: en curso (verificado para los siete endpoints de dominio que
+  existen hasta el cierre de F4 — recepción de orden, tara, activación,
+  lecturas, cierre, pesaje final y conciliación —; falta documentar los
+  que agregue el final — roles, alarmas, configuración).
   Implementación: `ordenes/controllers/OrdenRestController.java`
   (`@Operation`, `@ApiResponses` con ejemplos): recepción con
   201/400/409/500, tara con 200/400/404/409/500, activación con
@@ -701,6 +714,15 @@ y descarte de lecturas: `docs/fuentes.md`.
   seguridad Bearer JWT a nivel global, ya aplicado (`security` en la
   raíz del documento, verificado).
 
+  **Ampliación con los endpoints de F4:** `paths./api/v1/orders/{orderNumber}/cierre.post`,
+  `.../pesaje-final.post` y `.../conciliacion.get` presentes, cada uno
+  con `@Operation`/`@ApiResponses` y ejemplos reales, verificados
+  contra `GET /v3/api-docs` con la app corriendo en las dos unidades de
+  F4 (ver `docs/contrato-f4-cierre.md` y
+  `docs/contrato-f4-pesaje-conciliacion.md`). Los esquemas
+  `CierreResponse`, `PesajeFinalRequest` y `ConciliacionResponse`
+  aparecen en `components.schemas`.
+
 ### TP24 — Colección Postman
 - Descripción: colección Postman que prueba y valida las APIs
   desarrolladas.
@@ -712,8 +734,10 @@ y descarte de lecturas: `docs/fuentes.md`.
   variables documentadas (no credenciales fijas) y cada request es
   ejecutable contra el entorno local.
 - Estado: en curso (verificado para recepción de orden, tara,
-  activación y lecturas; falta ampliar con los endpoints de F4 en
-  adelante, según el criterio de "ampliar en el final"). Implementación:
+  activación, lecturas, cierre, pesaje final/conciliación y la matriz
+  de saltos/retrocesos de F4; queda "ampliar en el final" para los
+  requisitos exclusivos de esa entrega — roles, alarmas, UI).
+  Implementación:
   `postman/iw3-f2-recepcion.postman_collection.json` (6 requests: login,
   recepción válida, segunda orden reutilizando referencias existentes,
   duplicado de `orderNumber`, entrada inválida y solicitud sin token),
@@ -762,6 +786,28 @@ y descarte de lecturas: `docs/fuentes.md`.
   que la API no permite observar, ni contención efectiva de un lock a
   partir de lanzar procesos en paralelo — ver `docs/decisiones.md`,
   secciones F2 y F3.
+
+  **Ampliación con los endpoints de F4 (cierre, pesaje final/
+  conciliación y matriz de saltos/retrocesos):**
+  `postman/iw3-f4-cierre.postman_collection.json` (14 requests, 16
+  aserciones, 0 fallos — TP15),
+  `postman/iw3-f4-pesaje-conciliacion.postman_collection.json` (19
+  requests, 21 aserciones, 0 fallos — TP16-TP18) y
+  `postman/iw3-f4-saltos-retrocesos.postman_collection.json` (nueva en
+  esta entrada: 25 requests, 26 aserciones, 0 fallos — ocho
+  combinaciones operación/estado-inicial-incompatible que quedaban sin
+  ejercitar: `registrarTara`/`activar` sobre estados 3 y 4,
+  `registrarLectura` sobre estados 1 y 4, `cerrarCarga` sobre estado 4
+  y `registrarPesajeFinal` sobre estado 2; todas rechazadas con `409` y
+  el mensaje de estado incompatible esperado, sin `devInfo` con detalle
+  interno). Detalle completo de cada colección en
+  `docs/contrato-f4-cierre.md`, `docs/contrato-f4-pesaje-conciliacion.md`
+  y `docs/decisiones.md`, sección "F4 — cierre". Mismo límite que las
+  colecciones anteriores: solo verifican la respuesta HTTP, no
+  confirman por lectura directa de BD la ausencia de cambios en los
+  ocho rechazos nuevos ni la contención efectiva de las carreras ya
+  documentadas (alcance acotado a un solo orden de llegada observado
+  por carrera).
 
 ### TP25 — Simulación automatizada del circuito
 - Descripción: runner/tests de Postman que simulan el circuito completo

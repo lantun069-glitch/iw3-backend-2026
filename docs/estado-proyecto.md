@@ -936,29 +936,51 @@ idéntica a `fechaPesajeFinal`; ninguna fila de historial para
 - `docs/contrato-f4-pesaje-conciliacion.md` (nuevo), `docs/requisitos.md`,
   `docs/decisiones.md`, este archivo.
 
-**F4 sigue abierta.** TP15–TP18 quedan verificados para el alcance del
-parcial, ahora incluida evidencia directa de BD para las dos unidades.
-TP19 (promedios) diferido a F6, decisión ya tomada, no evidencia
-faltante por accidente. No se decidió todavía si corresponde cerrar F4
-ni se cerró el segundo parcial (TP22 en adelante).
+## Cierre de F4
 
-**Criterios de salida de F4 todavía sin evidencia completa (usando lo
-ya registrado en ambas unidades, sin repetir pruebas):**
-- Concurrencia: cada una de las tres carreras documentadas (cierre/
-  cierre, cierre/lectura, pesaje final/pesaje final) se observó en una
-  sola corrida; no hay evidencia de que el orden de llegada contrario
-  también se resuelva correctamente, solo del orden efectivamente
-  observado.
-- Matriz de saltos/retrocesos: solo se ejercitaron casos
-  representativos por unidad (p. ej. cierre/pesaje final sobre una
-  orden en estado 1), no cada combinación posible entre los cuatro
-  estados.
+**Aprobación:** el usuario aprobó el cierre de F4 para el alcance del
+segundo parcial (TP15–TP18) en base a la implementación y evidencia ya
+revisadas en ambas unidades, más la matriz de saltos/retrocesos
+completada en esta entrada. TP15–TP18 quedan **verificados**, incluida
+evidencia directa de BD para ambas unidades (corrección sobre una
+entrada anterior: la evidencia SQL de 940556/950632/960632, TP15,
+cubre `usuarioOProceso`/`usuariooproceso` en estados 1, 2 y 3, no solo
+3 — ver `docs/decisiones.md`, sección "F4 — cierre").
+
+**Matriz de saltos/retrocesos — completada:** las ocho combinaciones
+(operación, estado inicial incompatible) que ninguna unidad anterior
+había ejercitado —
+`registrarTara`/`activar` sobre estados 3 y 4, `registrarLectura` sobre
+estados 1 y 4, `cerrarCarga` sobre estado 4 y `registrarPesajeFinal`
+sobre estado 2 — se verificaron con `curl` y quedaron reproducibles en
+`postman/iw3-f4-saltos-retrocesos.postman_collection.json` (nueva): 25
+requests, 26 aserciones, 0 fallos. Las ocho respondieron `409` con el
+mensaje de estado incompatible esperado y sin detalle interno. Antes de
+agregar `registrarLectura` sobre estado 1 se confirmó que no estaba ya
+cubierta (la prueba previa de F3 usaba una orden en estado 2, no 1).
+Detalle completo en `docs/decisiones.md`, sección "F4 — cierre".
+
+**Límites conservados, sin resolver en este cierre (por instrucción
+explícita, no tratados como bloqueantes):**
+- Los ocho rechazos nuevos de la matriz **no se verificaron por lectura
+  directa de BD** — se apoyan en la respuesta HTTP y en que la
+  excepción de estado se lanza antes de cualquier `save()` (revisión de
+  código), igual criterio que los rechazos anteriores sin lectura
+  directa.
+- Concurrencia: las tres carreras documentadas (cierre/cierre, cierre/
+  lectura, pesaje final/pesaje final) siguen con alcance acotado a un
+  solo orden de llegada observado por carrera, no una prueba exhaustiva
+  de ambos órdenes posibles.
 - Sin prueba de un caso real de `500` en ninguna unidad de F4; sin
   verificación de comportamiento ante caída de conexión a mitad de
   transacción.
-- `usuarioOProceso` para `estadoNuevo=1`/`2` (recepción/tara) no se
-  verificó todavía por lectura directa de BD (sí por HTTP); solo
-  `estadoNuevo=3`/`4` tienen esa confirmación directa.
+- TP19 (promedios) sigue **diferido a F6**, decisión ya tomada en la
+  segunda unidad de F3 — no es evidencia faltante de F4.
 - Densidad (duda de rango/unidad, heredada de F3) sigue sin resolver.
-- TP22 en adelante (sin UI, Swagger/Postman completos, roles, alarmas)
-  no corresponden a F4 y no se evaluaron aquí.
+
+**F4 queda formalmente cerrada para el alcance del segundo parcial.**
+TP01, TP22, TP25 en adelante siguen pendientes por fase. **F5 (revisión
+de cobertura 1–5, Swagger completo, colección Postman sin secretos y
+datos de ejemplo reproducibles, preparación de la exposición) queda
+pendiente de iniciar**, según `CLAUDE.md`, sección 8. No se tocó ningún
+archivo de F5 en esta entrada.

@@ -216,3 +216,46 @@ Detalle completo: `docs/contrato-f4-pesaje-conciliacion.md`,
      sistema calcula y devuelve el valor tal cual; qué hacer con una
      diferencia así es una decisión humana posterior, no un chequeo de
      la API.)
+
+## Unidad: cierre de F4 — matriz de saltos/retrocesos
+
+Detalle completo: `docs/decisiones.md`, sección "F4 — cierre".
+
+- **Qué:** se identificaron ocho combinaciones (operación, estado
+  inicial) que ninguna unidad de F2–F4 había ejercitado —
+  `registrarTara`/`activar` sobre estados 3 y 4, `registrarLectura`
+  sobre estados 1 y 4, `cerrarCarga` sobre estado 4 y
+  `registrarPesajeFinal` sobre estado 2 — y se probaron contra cuatro
+  órdenes llevadas a los estados correspondientes. Las ocho devolvieron
+  `409` con el mensaje de estado incompatible esperado, sin detalle
+  interno. Quedaron reproducibles en
+  `postman/iw3-f4-saltos-retrocesos.postman_collection.json` (25
+  requests, 26 aserciones, 0 fallos).
+- **Por qué:** el criterio de salida de F4 pide "pruebas de saltos/
+  retrocesos" sobre el circuito completo; hasta esta entrada solo se
+  habían probado casos representativos (p. ej. tara repetida,
+  activación antes de tara), no cada combinación entre los cuatro
+  estados. Varias de estas combinaciones recién se volvieron
+  testeables con F4, porque antes no existían órdenes en estado 3 o 4.
+- **Cómo comprobarlo:** antes de agregar el caso de `registrarLectura`
+  sobre estado 1, se revisó la colección de F3 para confirmar que no
+  estuviera ya cubierto — la única prueba previa usaba una orden en
+  estado 2 (con tara), no en estado 1 — para no duplicar un caso ya
+  probado con otro nombre.
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué hizo falta una unidad aparte para esto, si cada operación
+     ya tenía su propio chequeo de estado? (Porque el chequeo en sí no
+     es lo que faltaba probar — el código ya lo tenía desde cada
+     unidad — sino la *evidencia* de que efectivamente se comporta
+     igual contra estados que antes de F4 nunca podían existir, como
+     una orden ya en estado 4.)
+  2. ¿Esto prueba que ninguno de los ocho rechazos modificó la base de
+     datos? (No: se verificó por HTTP y por revisión de código —la
+     excepción se lanza antes de cualquier `save()`—, no por una
+     lectura directa de BD. Es el mismo límite que ya tenían los
+     rechazos de unidades anteriores.)
+  3. ¿Por qué no se exigió también probar un error `500` real o ambos
+     órdenes posibles de cada carrera de concurrencia antes de cerrar
+     F4? (Fue una decisión explícita: ninguno de los dos es un
+     requisito confirmado del plan para este cierre: quedan como
+     límites documentados, no bloqueantes.)

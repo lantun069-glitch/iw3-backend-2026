@@ -859,3 +859,61 @@ origen.
   correspondiente; para 1792624401 el `LEFT JOIN` no devolvió ninguna
   fila de historial. Detalle completo, con la tabla reportada, en
   `docs/contrato-f4-pesaje-conciliacion.md`.
+
+## F4 — cierre
+
+**Aprobación:** el usuario aprobó el cierre de F4 para el alcance del
+segundo parcial (TP15–TP18) en base a la implementación y evidencia ya
+revisadas en ambas unidades, más la matriz de saltos/retrocesos
+completada en esta entrada, sin repetir pruebas ni auditorías
+anteriores.
+
+- **Matriz de saltos/retrocesos completada:** se identificaron ocho
+  combinaciones (operación, estado inicial incompatible) que ninguna
+  unidad anterior había ejercitado — `registrarTara`/`activar` sobre
+  estados 3 y 4, `registrarLectura` sobre estados 1 y 4, `cerrarCarga`
+  sobre estado 4 y `registrarPesajeFinal` sobre estado 2. Antes de
+  agregar `registrarLectura` sobre estado 1 se verificó explícitamente
+  que no estuviera ya cubierta: la única prueba previa de "lectura
+  antes de activar" (F3, segunda unidad) usaba una orden en estado 2
+  con tara ya registrada, no una orden en estado 1 sin tara — mensaje
+  distinto esperado ("no esta en estado 2", no "todavía no fue
+  activada"). Las ocho se probaron con `curl` contra la app local
+  (cuatro órdenes de apoyo llevadas a los estados 1/2/3/4 necesarios) y
+  las ocho respondieron `409` con el mensaje de estado incompatible
+  esperado (estado actual correcto en cada mensaje) y
+  `devInfo: "No stack trace"`, sin detalle interno expuesto.
+- **Versionadas en `postman/iw3-f4-saltos-retrocesos.postman_collection.json`
+  (nueva):** 25 requests (login, cuatro órdenes de apoyo, las
+  secuencias de avance necesarias para llevarlas a los estados 2/3/4, y
+  las ocho combinaciones), **26 aserciones, 0 fallos**, ejecutada con
+  `postman collection run`, credenciales solo por `--env-var`. No
+  repite ninguna combinación ya cubierta por
+  `iw3-f2-recepcion`/`iw3-f3-tara-activacion`/`iw3-f3-telemetria`/
+  `iw3-f4-cierre`/`iw3-f4-pesaje-conciliacion`.
+- **Límites conservados explícitamente, sin resolver en este cierre:**
+  - Estos ocho rechazos **no se verificaron por lectura directa de
+    BD**: la ausencia de cambios se apoya en la respuesta HTTP y en que
+    la excepción de estado se lanza antes de cualquier `save()`, dentro
+    de la misma transacción (revisión de código), igual criterio que
+    los rechazos de unidades anteriores sin lectura directa.
+  - Las carreras de concurrencia (cierre/cierre, cierre/lectura, pesaje
+    final/pesaje final) siguen con alcance acotado a un solo orden de
+    llegada observado por carrera, no una prueba exhaustiva de ambos
+    órdenes posibles.
+  - TP19 (promedios) sigue **diferido a F6**, decisión ya tomada en la
+    segunda unidad de F3, no una evidencia faltante por accidente de
+    F4.
+  - Densidad (duda de rango/unidad, heredada de F3) sigue sin resolver.
+  - Sin prueba de un caso real de `500` en ninguna unidad de F4; sin
+    verificación de comportamiento ante caída de conexión a mitad de
+    transacción. Por instrucción explícita, ninguno de estos dos puntos
+    (ni el alcance acotado de las carreras) se trata como bloqueante
+    para este cierre.
+- **F4 queda formalmente cerrada para el alcance del segundo parcial.**
+  TP01, TP22, TP25 en adelante siguen pendientes por fase (F5/F6, o el
+  cierre completo del segundo parcial para TP22). **F5 queda pendiente
+  de iniciar**, según el plan de fases vigente (`CLAUDE.md`, sección
+  8): revisar cobertura de los puntos 1–5, Swagger completo, colección
+  Postman sin secretos y datos de ejemplo reproducibles antes de
+  declarar lista la entrega del segundo parcial.
