@@ -1097,10 +1097,25 @@ ensayo cronometrado con todo el equipo) — no bloqueado por desconocer
 la fecha real de entrega; su *programación* depende de acordar cuándo
 hacerlo, no de ese dato faltante.
 
-**Próximo paso (fuera de esta sesión):** preparar la entrega
-reproducible (build, variables, colecciones) y verificar el despliegue
-en la VM junto con el usuario — sin que esta sesión acceda a la VM ni
-modifique Nginx, certificados o configuración de despliegue. La
-integración `feature/f5-preparacion-parcial` → `develop` → `main`
-queda pendiente hasta verificar esa entrega; no se hace merge por
-cerrar una sesión.
+**Despliegue en VM — en pausa (22/10/2026):** el usuario reporta que
+el acceso a la VM está pendiente de respuesta del profesor, por
+aparente falta de disponibilidad de este último. **No se accedió ni se
+modificó la VM** en ningún momento de esta sesión ni de la anterior.
+Al retomar ese frente, el primer paso sigue siendo **verificar acceso
+y servicios** (confirmar que el profesor habilitó el acceso, y relevar
+qué hay corriendo en la VM — Nginx, HTTPS, contenedores — antes de
+proponer cualquier cambio), sin que ninguna sesión acceda a la VM ni
+modifique Nginx, certificados o configuración de despliegue hasta ese
+momento.
+
+**DECISIÓN DEL EQUIPO (22/10/2026):** no esperar la disponibilidad de
+la VM para integrar el trabajo ya verificado. La integración
+`feature/f5-preparacion-parcial` → `develop` → `main` se realiza con
+el alcance reproducible verificado localmente (TP22-TP25); `main`
+pasa a contener la **versión funcional local** del segundo parcial,
+no una entrega desplegada. El despliegue en la VM y el ensayo/defensa
+de equipo (TP26) **siguen pendientes** y se retoman cuando haya acceso
+confirmado. Por eso **F5 no se declara completamente cerrada**: queda
+cerrada la integración de código/documentación a `main`, pero la
+puerta de salida de fase (sección 12 de `CLAUDE.md`) exige también
+TP26 y, para una entrega desplegable, el despliegue verificado.
