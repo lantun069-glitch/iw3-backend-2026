@@ -917,3 +917,24 @@ anteriores.
   8): revisar cobertura de los puntos 1–5, Swagger completo, colección
   Postman sin secretos y datos de ejemplo reproducibles antes de
   declarar lista la entrega del segundo parcial.
+
+## Flujo de ramas — confirmado antes de iniciar F5
+
+No es una decisión nueva: coincide con `CLAUDE.md`, sección 4. Se
+registra aquí porque el usuario pidió confirmarlo explícitamente como
+acuerdo vigente en este punto del proyecto, antes de abrir F5.
+
+- `feature/*` → PR a `develop` → PR a `main` cuando se autorice una
+  entrega.
+- `develop` acumula el desarrollo integrado y revisado (no es un
+  espejo de ninguna rama `feature/*` individual).
+- `main` recibe primero la entrega del segundo parcial (con su
+  etiqueta `parcial-2-v1.0.0` propuesta), y más adelante la del final
+  (`final-v1.0.0`). `main` no representa una entrega aprobada hasta
+  que efectivamente se promueva una versión estable y se etiquete.
+- Después de la entrega del parcial, el trabajo continúa con el mismo
+  patrón `feature/*` → `develop` (no se abre un flujo distinto para el
+  final).
+- Esta entrada **no** ejecuta ningún merge, push ni cambio de rama: la
+  rama de trabajo actual sigue siendo `feature/f4-cierre-conciliacion`,
+  todavía sin PR a `develop`.

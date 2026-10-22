@@ -28,13 +28,15 @@ la alternativa admitida para el parcial —últimos valores, no
 promedios— sí quedó cubierta en la conciliación); TP20 y TP21 están
 **verificados** (los cinco timestamps, las cuatro transiciones del
 circuito y, al cierre de F4, la matriz de saltos/retrocesos entre
-estados); TP23 y TP24
-(OpenAPI y Postman) están **en curso**, verificados para
-recepción+tara+activación+lecturas+cierre+pesaje final/conciliación; el
-resto de los requisitos funcionales (TP01, TP22, TP25 en adelante) sigue
+estados); TP22 y TP25 están **verificados** para la primera unidad de
+F5 (runner del circuito completo, rama `feature/f5-preparacion-parcial`,
+**F5 sigue abierta**: falta la revisión integral de TP23/TP24 y el
+ensayo de TP26); TP23 y TP24 (OpenAPI y Postman) están **en curso**,
+verificados para recepción+tara+activación+lecturas+cierre+pesaje
+final/conciliación, pendientes de la revisión integral de esta fase; el
+resto de los requisitos funcionales (TP01, TP26 en adelante) sigue
 **pendiente**, porque las fases que les corresponden (F6, o el cierre
-del segundo parcial para TP22) todavía no empezaron. TP36, de
-preparación
+del segundo parcial) todavía no empezaron. TP36, de preparación
 para la defensa, está en curso; todavía no se practicaron las preguntas.
 De las filas de equipo/infraestructura (EQ), EQ01 y EQ02 están en curso
 y EQ03 está verificado.
@@ -669,7 +671,28 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F5.
 - Criterio de aceptación: demostración completa de los 5 puntos ejecutada
   desde Postman, sin pantallas propias.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado**, para la primera unidad de F5 (runner del
+  circuito completo). Implementación:
+  `postman/iw3-f5-runner-circuito.postman_collection.json` (9 requests
+  encadenados automáticamente por orden: login → recepción → tara →
+  activación → lectura×2 → cierre → pesaje final → conciliación, sin
+  intervención manual entre pasos ni pantallas propias). Evidencia:
+  `postman collection run --iteration-count 2` — **18 requests, 68
+  aserciones, 0 fallos** en las dos iteraciones, cada una sobre una
+  orden distinta con datos y resultado de conciliación distintos
+  (diferencia esperada `+80.000` y `-100.000` respectivamente, ambas
+  verificadas contra el valor exacto esperado, no solo contra "algún
+  número"). Corte ante fallo comprobado dos veces: credenciales de
+  login inválidas (detiene el resto de cada iteración tras el primer
+  paso, 8 pasos omitidos por iteración) y `taraKg` inválido a mitad de
+  camino (detiene tras el tercer paso, 5 pasos omitidos por iteración)
+  — confirma que un paso roto no produce fallos en cascada en los
+  pasos posteriores que dependen de sus datos. Detalle completo en
+  `docs/contrato-f5-runner.md`. **Límite conservado: esta verificación
+  es únicamente sobre la respuesta HTTP — no confirma por lectura
+  directa de BD que lo persistido coincida con lo devuelto** (ese tipo
+  de confirmación ya se hizo, unidad por unidad, en F3/F4; este runner
+  no repite esa verificación).
 
 ### TP23 — Documentación OpenAPI/Swagger
 - Descripción: documentación técnica de la API con OpenAPI/Swagger.
@@ -823,7 +846,24 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: el runner encadena número de orden/clave/token
   automáticamente y valida cada respuesta, sin depender de variables
   globales compartidas entre ejecuciones.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado**. Implementación:
+  `postman/iw3-f5-runner-circuito.postman_collection.json`:
+  `orderNumber`/`extSuffix` generados en el pre-request del primer item
+  a partir de la hora actual y el índice de iteración;
+  `claveActivacion` capturado de la respuesta de tara; `jwtToken`
+  capturado del login — los tres en variables de **colección**
+  (`pm.collectionVariables`), no en variables de entorno/globales, y
+  nunca impresos (sin `console.log`, sin aparecer en ninguna
+  descripción de test). Cada item valida estado HTTP y contenido del
+  cuerpo; ante un fallo, `pm.execution.setNextRequest(null)` corta el
+  resto de esa iteración. Evidencia: igual que TP22 —
+  `--iteration-count 2`: **18 requests, 68 aserciones, 0 fallos**,
+  `orderNumber` distinto entre iteraciones (confirma que la
+  reinicialización no depende de un flag persistente ni reutiliza
+  datos de una iteración anterior); corte ante fallo comprobado en
+  login (2 requests totales, 8 pasos omitidos por iteración) y en tara
+  (6 requests totales, 5 pasos omitidos por iteración). Detalle
+  completo en `docs/contrato-f5-runner.md`.
 
 ### TP26 — Presentación de 15-20 min con preguntas individuales
 - Descripción: presentación operativa del circuito el día de la entrega,
@@ -1011,6 +1051,15 @@ y descarte de lecturas: `docs/fuentes.md`.
   `.gitignore`). Evidencia: `git log`/`git branch -vv` en ambos repos
   (detalle en `docs/estado-proyecto.md`). Falta la primera PR real a
   `develop`.
+  **Flujo confirmado al cierre de F4, antes de iniciar F5:**
+  `feature/*` → PR a `develop` (que acumula el desarrollo integrado) →
+  PR a `main` cuando se autorice una entrega. `main` recibirá primero
+  la entrega del segundo parcial (con su etiqueta) y, más adelante, la
+  del final. Después del parcial, el trabajo continúa con el mismo
+  patrón `feature/*` → `develop`. No es una decisión nueva —coincide
+  con el flujo ya definido en `CLAUDE.md`, sección 4— sino su
+  confirmación operativa para este punto del proyecto, sin cambios de
+  rama todavía.
 
 ### EQ02 — Simplicidad y decisiones trazables
 - Descripción: cada cambio no trivial tiene una fuente citada o una

@@ -984,3 +984,67 @@ de cobertura 1–5, Swagger completo, colección Postman sin secretos y
 datos de ejemplo reproducibles, preparación de la exposición) queda
 pendiente de iniciar**, según `CLAUDE.md`, sección 8. No se tocó ningún
 archivo de F5 en esta entrada.
+
+**Flujo de ramas confirmado antes de iniciar F5** (no es una decisión
+nueva, coincide con `CLAUDE.md` sección 4; detalle en
+`docs/decisiones.md`, sección "Flujo de ramas"): `feature/*` → PR a
+`develop` (desarrollo integrado) → PR a `main` (primero la entrega del
+segundo parcial, luego la del final) cuando se autorice. Después del
+parcial, se continúa con el mismo patrón hacia `develop`.
+
+## F5 — primera unidad: runner del circuito completo (TP22/TP25)
+
+**Alcance:** únicamente TP22 (demostración completa de los 5 puntos
+desde Postman, sin pantallas propias) y TP25 (runner opcional
+recomendado, que encadena `orderNumber`/clave/token automáticamente).
+No incluye la revisión integral de Swagger/colecciones existentes
+(TP23/TP24 en su forma final) ni el ensayo de presentación (TP26).
+Rama `feature/f5-preparacion-parcial`, creada desde el HEAD `fde2e00`
+(cierre de F4), conservando sin commitear los cambios documentales del
+flujo de ramas que ya estaban pendientes en esa rama.
+
+**Resumen:** colección nueva
+`postman/iw3-f5-runner-circuito.postman_collection.json`, 9 requests
+que encadenan el circuito completo (login → recepción → tara →
+activación → lectura×2 → cierre → pesaje final → conciliación) sobre
+una orden por iteración, sin intervención manual. `orderNumber`/
+`claveActivacion`/`jwtToken` propagados en variables de **colección**
+(nunca impresos ni exportados a variables de entorno/globales). Cada
+item valida estado HTTP y contenido; ante un fallo,
+`pm.execution.setNextRequest(null)` corta el resto de esa iteración.
+Datos y resultado de conciliación distintos por iteración (dataset por
+`pm.info.iteration`, no al azar), cada uno comparado contra su valor
+exacto esperado. Detalle completo y justificación en
+`docs/contrato-f5-runner.md`.
+
+**Evidencia:** `postman collection run --iteration-count 2` — **18
+requests, 68 aserciones, 0 fallos**, con `orderNumber` distinto entre
+ambas iteraciones (confirma reinicialización sin flags persistentes ni
+reutilización de datos) y conciliación verificada contra el valor
+esperado de cada iteración (`diferenciaKg` `+80.000` y `-100.000`).
+Corte ante fallo verificado dos veces: credenciales de login inválidas
+(2 requests totales, 8 pasos omitidos por iteración) y `taraKg`
+inválido a mitad de camino, sobre una copia temporal descartada después
+de la prueba (6 requests totales, 5 pasos omitidos por iteración). Se
+corrigió `postman.setNextRequest` (deprecado) por
+`pm.execution.setNextRequest` antes de cerrar la unidad; se repitió el
+camino feliz después del cambio con el mismo resultado.
+
+**Límite conservado:** esta verificación es únicamente sobre la
+respuesta HTTP — **no confirma por lectura directa de BD que lo
+persistido coincida con lo devuelto**. Esa confirmación ya se hizo,
+unidad por unidad, en F3/F4 (ver `docs/contrato-f4-cierre.md` y
+`docs/contrato-f4-pesaje-conciliacion.md`); este runner no la repite,
+porque no agrega ninguna regla de negocio nueva.
+
+**Archivos nuevos:**
+- `postman/iw3-f5-runner-circuito.postman_collection.json` (nuevo).
+- `docs/contrato-f5-runner.md` (nuevo), `docs/requisitos.md`, este
+  archivo.
+
+**F5 sigue abierta.** TP22 y TP25 quedan verificados; falta la
+revisión integral de TP23/TP24 (Swagger completo, colección Postman
+sin secretos y datos de ejemplo reproducibles sobre *todas* las
+colecciones) y el ensayo de TP26 (no bloqueado por desconocer la fecha
+real de entrega — su *programación* depende de acordar cuándo
+hacerlo, no de ese dato faltante).
