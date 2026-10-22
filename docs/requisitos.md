@@ -703,10 +703,12 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F5.
 - Criterio de aceptación: operaciones, esquemas, unidades y errores
   documentados coinciden con el comportamiento real de la API.
-- Estado: en curso (verificado para los siete endpoints de dominio que
-  existen hasta el cierre de F4 — recepción de orden, tara, activación,
-  lecturas, cierre, pesaje final y conciliación —; falta documentar los
-  que agregue el final — roles, alarmas, configuración).
+- Estado: **verificado para el alcance del segundo parcial** (los
+  siete endpoints de dominio existentes al cierre de F4/F5 —
+  recepción, tara, activación, lecturas, cierre, pesaje final y
+  conciliación — están documentados y coinciden con el comportamiento
+  real). Pendiente de ampliar en el final con lo que agreguen roles,
+  alarmas y configuración (F6) — no se declara cumplido ese alcance.
   Implementación: `ordenes/controllers/OrdenRestController.java`
   (`@Operation`, `@ApiResponses` con ejemplos): recepción con
   201/400/409/500, tara con 200/400/404/409/500, activación con
@@ -714,7 +716,15 @@ y descarte de lecturas: `docs/fuentes.md`.
   lecturas con 200 (aceptada y descartada)/400/404/409 (dos variantes:
   estado incompatible y sin activar)/500;
   `@io.swagger.v3.oas.annotations.parameters.RequestBody` con ejemplo de
-  entrada en los cuatro casos. Evidencia: `GET /v3/api-docs` verificado
+  entrada en los **siete** endpoints con body (corregido en esta
+  revisión: hasta ahora solo `recibir()` tenía ejemplo de request body;
+  se agregó el mismo patrón a `tara`/`activacion`/`lecturas`/
+  `pesaje-final`, sin cambios de lógica ni DTOs — verificado contra
+  `GET /v3/api-docs` con la app corriendo: `{"taraKg":12000.000}`,
+  `{"clave":54231}`,
+  `{"masaAcumuladaKg":4000.000,"densidad":0.5400,"temperaturaC":18.50,"caudalKgH":3000.000}`
+  y `{"pesoBrutoKg":16080.000}` respectivamente, sin afectar el ejemplo
+  ya existente de `recibir()`). Evidencia: `GET /v3/api-docs` verificado
   contra la app corriendo — `paths./api/v1/orders.post` con summary,
   description, ejemplo de request y las cinco respuestas de recepción
   (201 con ejemplo; 400 con dos ejemplos — campo obligatorio ausente y
@@ -756,11 +766,14 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: la colección se importa sin errores, usa
   variables documentadas (no credenciales fijas) y cada request es
   ejecutable contra el entorno local.
-- Estado: en curso (verificado para recepción de orden, tara,
-  activación, lecturas, cierre, pesaje final/conciliación y la matriz
-  de saltos/retrocesos de F4; queda "ampliar en el final" para los
-  requisitos exclusivos de esa entrega — roles, alarmas, UI).
-  Implementación:
+- Estado: **verificado para el alcance del segundo parcial** (las 7
+  colecciones cubren exactamente los 7 endpoints de dominio existentes
+  —recepción, tara, activación, lecturas, cierre, pesaje final y
+  conciliación—, sin huecos; revisado en esta entrada: `testUsername`/
+  `testPassword`/`jwtToken` vacíos por defecto en las 7, sin secretos ni
+  tokens reales encontrados en `postman/` por `grep`). Queda "ampliar
+  en el final" para los requisitos exclusivos de esa entrega — roles,
+  alarmas, UI. Implementación:
   `postman/iw3-f2-recepcion.postman_collection.json` (6 requests: login,
   recepción válida, segunda orden reutilizando referencias existentes,
   duplicado de `orderNumber`, entrada inválida y solicitud sin token),

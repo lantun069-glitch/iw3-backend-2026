@@ -157,7 +157,9 @@ public class OrdenRestController extends BaseRestController {
 	@PostMapping(value = "/{orderNumber}/tara", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<?> registrarTara(@PathVariable Integer orderNumber,
-			@org.springframework.web.bind.annotation.RequestBody @Valid TaraRequest request) {
+			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
+					content = @Content(examples = @ExampleObject(value = "{\"taraKg\":12000.000}")))
+			TaraRequest request) {
 		String actor = getUserLogged().getUsername();
 		try {
 			Orden orden = ordenBusiness.registrarTara(orderNumber, request.getTaraKg(), actor);
@@ -200,7 +202,9 @@ public class OrdenRestController extends BaseRestController {
 	@PostMapping(value = "/{orderNumber}/activacion", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<?> activar(@PathVariable Integer orderNumber,
-			@org.springframework.web.bind.annotation.RequestBody @Valid ActivacionRequest request) {
+			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
+					content = @Content(examples = @ExampleObject(value = "{\"clave\":54231}")))
+			ActivacionRequest request) {
 		try {
 			Orden orden = ordenBusiness.activar(orderNumber, request.getClave());
 			ActivacionResponse body = new ActivacionResponse(orden.getOrderNumber(), orden.getPresetKg(),
@@ -249,7 +253,9 @@ public class OrdenRestController extends BaseRestController {
 	@PostMapping(value = "/{orderNumber}/lecturas", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<?> registrarLectura(@PathVariable Integer orderNumber,
-			@org.springframework.web.bind.annotation.RequestBody @Valid LecturaRequest request) {
+			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
+					content = @Content(examples = @ExampleObject(value = "{\"masaAcumuladaKg\":4000.000,\"densidad\":0.5400,\"temperaturaC\":18.50,\"caudalKgH\":3000.000}")))
+			LecturaRequest request) {
 		try {
 			LecturaResultado resultado = ordenBusiness.registrarLectura(orderNumber, request.getMasaAcumuladaKg(),
 					request.getDensidad(), request.getTemperaturaC(), request.getCaudalKgH());
@@ -335,7 +341,9 @@ public class OrdenRestController extends BaseRestController {
 	@PostMapping(value = "/{orderNumber}/pesaje-final", consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<?> pesajeFinal(@PathVariable Integer orderNumber,
-			@org.springframework.web.bind.annotation.RequestBody @Valid PesajeFinalRequest request) {
+			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
+					content = @Content(examples = @ExampleObject(value = "{\"pesoBrutoKg\":16080.000}")))
+			PesajeFinalRequest request) {
 		String actor = getUserLogged().getUsername();
 		try {
 			Conciliacion conciliacion = ordenBusiness.registrarPesajeFinal(orderNumber, request.getPesoBrutoKg(), actor);
