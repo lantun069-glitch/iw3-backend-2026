@@ -165,3 +165,54 @@ sección "F4 — primera unidad".
      relee el estado ya actualizado por quien la ganó, dentro de la misma
      transacción — se verificó con dos `curl` en paralelo, no es solo un
      argumento teórico.)
+
+## Unidad: pesaje final y conciliación (F4, segunda unidad, TP16–TP18)
+
+Detalle completo: `docs/contrato-f4-pesaje-conciliacion.md`,
+`docs/decisiones.md` sección "F4 — segunda unidad".
+
+- **Qué:** `POST /api/v1/orders/{orderNumber}/pesaje-final` (sin
+  precondiciones propias más allá de `estado==3`: transiciona a 4,
+  guarda `pesoBrutoKg`/`fechaPesajeFinal` y devuelve la conciliación en
+  la misma respuesta) y `GET /api/v1/orders/{orderNumber}/conciliacion`
+  (solo lectura, solo estado 4, mismo cálculo). `netoKg = pesoBrutoKg -
+  taraKg`; `productoCargadoKg` es la última masa acumulada ACEPTADA
+  (no el preset); `diferenciaKg = netoKg - productoCargadoKg`, sin
+  rechazo ni tolerancia por su signo. `ultimaTemperaturaC`/
+  `ultimaDensidad`/`ultimoCaudalKgH` son los últimos valores del
+  snapshot, explícitamente no llamados "promedio".
+- **Por qué:** T1 pide un servicio que, al recibir el pesaje final,
+  cambie la orden a 4 y devuelva la conciliación en la misma operación
+  (TP16), más un endpoint separado para consultarla después, solo en
+  estado 4 (TP17). La fórmula (TP18) viene del ejemplo numérico de la
+  fuente (tara/bruto/neto) más la distinción explícita entre preset y
+  producto realmente cargado. Nombrar los últimos valores como tales
+  (no "promedio") evita que alguien los confunda con TP19, que sigue
+  diferido a F6 por decisión ya tomada en la unidad anterior.
+- **Cómo comprobarlo:** `curl` contra la app local probando los tres
+  signos de `diferenciaKg` (cero/positiva/negativa) contra un cálculo
+  manual, y `postman collection run` sobre
+  `postman/iw3-f4-pesaje-conciliacion.postman_collection.json` (19
+  requests, 21 aserciones, 0 fallos). La respuesta del `POST` y la del
+  `GET` inmediatamente posterior, sobre la misma orden, se compararon
+  directamente y son idénticas. Una carrera de dos pesajes finales
+  concurrentes con `curl` en paralelo confirmó que el mismo bloqueo
+  `PESSIMISTIC_WRITE` ya usado en las unidades anteriores también
+  serializa esta transición.
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué el pesaje final no vuelve a chequear activación ni
+     lecturas aceptadas, si el cierre (TP15) sí lo hacía? (Porque esas
+     dos condiciones ya están garantizadas por el circuito: para llegar
+     a estado 3 la orden tuvo que pasar por el cierre, que las exige.
+     Repetir el chequeo ahí habría sido redundante, no una protección
+     adicional real.)
+  2. ¿Por qué `productoCargadoKg` no es el `presetKg`? (Porque el preset
+     es el objetivo de carga, no lo que realmente se cargó — T1 es
+     explícito en que no deben confundirse; se usa la última masa
+     acumulada aceptada del snapshot de telemetría.)
+  3. ¿Qué pasa si `pesoBrutoKg` resulta menor que `taraKg` (neto
+     negativo)? (No se rechaza: la instrucción fue explícita en no
+     inventar tolerancias ni rechazos por el signo de la diferencia. El
+     sistema calcula y devuelve el valor tal cual; qué hacer con una
+     diferencia así es una decisión humana posterior, no un chequeo de
+     la API.)

@@ -16,6 +16,13 @@ public interface OrdenRepository extends JpaRepository<Orden, Long> {
 	boolean existsByOrderNumber(Integer orderNumber);
 
 	/**
+	 * Lectura simple, sin bloqueo: para consultarConciliacion (TP17), que
+	 * no escribe nada y no necesita serializarse con tara/activacion/
+	 * lectura/cierre/pesaje final.
+	 */
+	Optional<Orden> findByOrderNumber(Integer orderNumber);
+
+	/**
 	 * Bloqueo pesimista de escritura sobre la fila de la orden, para
 	 * serializar tara/activacion concurrentes de la misma orderNumber
 	 * dentro de la transaccion que la invoca. No se usa @Version: la

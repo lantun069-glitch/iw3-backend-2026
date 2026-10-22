@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,6 +21,7 @@ import ar.edu.iua.iw3.business.execption.FoundException;
 import ar.edu.iua.iw3.business.execption.NotFoundException;
 import ar.edu.iua.iw3.controllers.BaseRestController;
 import ar.edu.iua.iw3.controllers.Constants;
+import ar.edu.iua.iw3.ordenes.business.Conciliacion;
 import ar.edu.iua.iw3.ordenes.business.IOrdenBusiness;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
@@ -27,10 +29,12 @@ import ar.edu.iua.iw3.ordenes.business.LecturaResultado;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.CierreResponse;
+import ar.edu.iua.iw3.ordenes.controllers.dto.ConciliacionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionResponse;
+import ar.edu.iua.iw3.ordenes.controllers.dto.PesajeFinalRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.TaraRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.TaraResponse;
 import ar.edu.iua.iw3.ordenes.model.Orden;
@@ -49,8 +53,10 @@ import jakarta.validation.Valid;
  * F2 cubrio la recepcion de una orden (recibir()). F3, primera unidad,
  * agrega tara/activacion (registrarTara()/activar()); segunda unidad,
  * telemetria (registrarLectura()). F4 agrega el cierre explicito 2->3
- * (cerrar(), TP15); pesaje final y conciliacion (TP16-TP18) todavia no.
- * No expone CRUD/consulta para Orden
+ * (cerrar(), TP15), el pesaje final con conciliacion (pesajeFinal(),
+ * TP16/TP18) y su consulta posterior (conciliacion(), TP17). TP19
+ * (promedios) sigue diferido a F6: los ultimos valores de temperatura/
+ * densidad/caudal en la conciliacion no son promedios. No expone CRUD/consulta para Orden
  * ni para sus referencias (Camion/Chofer/Cliente/Producto); eso no
  * esta pedido para estas unidades. No hay endpoint de consulta del
  * snapshot/historico: la respuesta de cada lectura ya devuelve el
@@ -304,6 +310,82 @@ public class OrdenRestController extends BaseRestController {
 					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
+	}
+
+	@Operation(summary = "Registrar el pesaje final (estado 3 -> 4)",
+			description = "Registra el peso bruto (camion cargado), transiciona la orden a estado 4 y devuelve "
+					+ "la conciliacion calculada en esa misma operacion (TP16/TP18). Requiere que la orden "
+					+ "exista y este en estado 3. productoCargadoKg es la ultima masa acumulada ACEPTADA (no el "
+					+ "preset); ultimaTemperaturaC/ultimaDensidad/ultimoCaudalKgH son los ULTIMOS VALORES del "
+					+ "snapshot de telemetria, no promedios (TP19, diferido). Una diferenciaKg distinta de 0 no "
+					+ "causa ningun rechazo. Requiere autenticacion JWT.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Pesaje final registrado, orden en estado 4, conciliacion incluida.",
+					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000}"))),
+			@ApiResponse(responseCode = "400", description = "pesoBrutoKg ausente, no positivo, o con mas de 3 decimales/12 enteros.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"pesoBrutoKg: must be greater than 0\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 3 (incluye pesaje final repetido).",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"La orden orderNumber=900001 no esta en estado 3 (estado actual: 2)\",\"code\":409,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@PostMapping(value = "/{orderNumber}/pesaje-final", consumes = MediaType.APPLICATION_JSON_VALUE,
+			produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<?> pesajeFinal(@PathVariable Integer orderNumber,
+			@org.springframework.web.bind.annotation.RequestBody @Valid PesajeFinalRequest request) {
+		String actor = getUserLogged().getUsername();
+		try {
+			Conciliacion conciliacion = ordenBusiness.registrarPesajeFinal(orderNumber, request.getPesoBrutoKg(), actor);
+			return new ResponseEntity<>(aConciliacionResponse(conciliacion), HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (InvalidStateException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
+		} catch (BusinessException e) {
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Operation(summary = "Consultar la conciliacion (solo estado 4)",
+			description = "Devuelve la misma conciliacion calculada por el pesaje final (TP17), sin escrituras. "
+					+ "Requiere que la orden exista y este en estado 4; se puede llamar repetidas veces. "
+					+ "Requiere autenticacion JWT.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Conciliacion de una orden en estado 4.",
+					content = @Content(schema = @Schema(implementation = ConciliacionResponse.class), examples = @ExampleObject(value = "{\"orderNumber\":900001,\"taraKg\":12000.000,\"pesoBrutoKg\":22080.000,\"netoKg\":10080.000,\"productoCargadoKg\":10000.000,\"diferenciaKg\":80.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000}"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "409", description = "La orden no esta en estado 4.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"La orden orderNumber=900001 no esta en estado 4 (estado actual: 3)\",\"code\":409,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@GetMapping(value = "/{orderNumber}/conciliacion", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<?> conciliacion(@PathVariable Integer orderNumber) {
+		try {
+			Conciliacion conciliacion = ordenBusiness.consultarConciliacion(orderNumber);
+			return new ResponseEntity<>(aConciliacionResponse(conciliacion), HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (InvalidStateException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
+		} catch (BusinessException e) {
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	private ConciliacionResponse aConciliacionResponse(Conciliacion c) {
+		return new ConciliacionResponse(c.getOrderNumber(), c.getTaraKg(), c.getPesoBrutoKg(), c.getNetoKg(),
+				c.getProductoCargadoKg(), c.getDiferenciaKg(), c.getUltimaTemperaturaC(), c.getUltimaDensidad(),
+				c.getUltimoCaudalKgH());
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)

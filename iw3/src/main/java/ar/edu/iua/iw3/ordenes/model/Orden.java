@@ -156,4 +156,14 @@ public class Orden {
 	 */
 	@Column
 	private LocalDateTime fechaFinCarga;
+
+	/**
+	 * Pesaje final (camion cargado), registrado en la transicion 3->4
+	 * (TP16). Misma precision DECIMAL(15,3) que taraKg/presetKg.
+	 */
+	@Column(precision = 15, scale = 3)
+	private BigDecimal pesoBrutoKg;
+
+	@Column
+	private LocalDateTime fechaPesajeFinal;
 }

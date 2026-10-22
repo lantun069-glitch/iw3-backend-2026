@@ -18,16 +18,19 @@ TP10 a TP13 están **verificados** (TP13 puntualmente para las órdenes
 usuario, no generalizado a escenarios no probados) para la segunda
 unidad de F3 (telemetría), aprobada y publicada en la misma rama; TP14
 sigue **pendiente**,
-confirmado explícitamente no adelantado en esta unidad; TP15 está
-**verificado** para la primera unidad de F4 (cierre explícito 2→3, rama
-`feature/f4-cierre-conciliacion`, sin publicar todavía); TP20 y TP21
-están **en curso** (cubren recepción, tara, activación, primera lectura
-y ahora cierre; el pesaje final de TP16 sigue pendiente); TP23 y TP24
+confirmado explícitamente no adelantado en esta unidad; TP15 a TP18
+están **verificados**, incluida confirmación por consulta directa de
+BD ejecutada por el usuario para ambas unidades, para las dos unidades
+de F4 (cierre 2→3 y pesaje final 3→4 con conciliación, rama
+`feature/f4-cierre-conciliacion`); TP19 sigue **pendiente** (promedios
+diferidos a F6; la alternativa admitida para el parcial —últimos
+valores, no promedios— sí quedó cubierta en la conciliación); TP20 y
+TP21 están **verificados** (los cinco timestamps y las cuatro
+transiciones del circuito, incluido el pesaje final); TP23 y TP24
 (OpenAPI y Postman) están **en curso**, verificados para
-recepción+tara+activación+lecturas+cierre y pendientes de ampliar con
-pesaje final/conciliación; el resto de los requisitos funcionales
-(TP01, TP16–TP19, TP22, TP25 en adelante) sigue **pendiente**, porque
-las fases que les corresponden (resto de F4 en adelante, o el cierre
+recepción+tara+activación+lecturas+cierre+pesaje final/conciliación; el
+resto de los requisitos funcionales (TP01, TP22, TP25 en adelante) sigue
+**pendiente**, porque las fases que les corresponden (F6, o el cierre
 del segundo parcial para TP22) todavía no empezaron. TP36, de
 preparación
 para la defensa, está en curso; todavía no se practicaron las preguntas.
@@ -459,7 +462,35 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F4.
 - Criterio de aceptación: la respuesta de esa operación incluye la
   conciliación; se rechaza si la orden no está en estado 3.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado**, para el alcance de esta unidad (segunda de
+  F4). Implementación: `POST /api/v1/orders/{orderNumber}/pesaje-final`
+  (`OrdenRestController.pesajeFinal`, `OrdenBusiness.registrarPesajeFinal`).
+  Precondiciones: orden existente (404 si no), en estado 3 (409 si no,
+  cubre también el pesaje final repetido). Guarda `pesoBrutoKg` y
+  `fechaPesajeFinal` (instante real de la llamada, no derivado de otra
+  fecha), transiciona a 4 y audita en `HistorialEstado`
+  (`estadoNuevo=4`, actor autenticado). Mismo bloqueo pesimista
+  (`findByOrderNumberForUpdate`) y transacción con rollback que
+  tara/activación/lectura/cierre. Devuelve la conciliación calculada
+  (ver TP18) en la misma respuesta. Evidencia: probado con `curl`
+  contra la app local recorriendo diferencia cero/positiva/negativa,
+  los rechazos (404, 409 en estado 1, 409 repetido), validación 400
+  (ausente/no positivo/4 decimales) y una carrera de dos pesajes
+  finales concurrentes (`curl` en paralelo: uno `200`, otro `409`,
+  confirmado con una conciliación posterior). Confirmado también con
+  `postman collection run` sobre
+  `postman/iw3-f4-pesaje-conciliacion.postman_collection.json`: 19
+  requests, 21 aserciones, 0 fallos. `GET /v3/api-docs` confirma el
+  path nuevo. **Confirmado además por consulta directa de BD, ejecutada
+  por el usuario** (sin acceso de esta sesión a cliente MySQL ni
+  `docker exec`): para las seis órdenes de esta unidad
+  (1792624398/399/400/401/402/403), `peso_bruto_kg`/`fecha_pesaje_final`
+  no nulos y `estado=4` en las cinco que llegaron a pesaje final, con
+  los valores de bruto/neto/diferencia exactamente iguales a los
+  calculados por HTTP (ver TP18); la orden 1792624401 (nunca llegó a
+  pesaje final) muestra `estado=1` y esos campos en `NULL`, como se
+  esperaba. Detalle completo, con la tabla reportada por el usuario, en
+  `docs/contrato-f4-pesaje-conciliacion.md`.
 
 ### TP17 — Consulta de conciliación, solo en estado 4
 - Descripción: endpoint separado para consultar la conciliación en
@@ -471,7 +502,17 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F4.
 - Criterio de aceptación: disponible repetidas veces en estado 4;
   rechazada en estados 1, 2 y 3.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado**. Implementación:
+  `GET /api/v1/orders/{orderNumber}/conciliacion`
+  (`OrdenRestController.conciliacion`, `OrdenBusiness.consultarConciliacion`),
+  sin escrituras ni bloqueo pesimista (lectura simple con
+  `OrdenRepository.findByOrderNumber`, sin `@Lock`): no participa de
+  ninguna transición de estado. Requiere estado 4 (409 en cualquier
+  otro, 404 si no existe). Evidencia: probado con `curl` rechazando en
+  estados 1/2/3 y aceptando repetidas veces en estado 4 con el mismo
+  resultado; comparación directa con la respuesta del `POST` de pesaje
+  final sobre la misma orden — **idénticas**. Detalle completo en
+  `docs/contrato-f4-pesaje-conciliacion.md`.
 
 ### TP18 — Cálculo de la conciliación
 - Descripción: tara, bruto (pesaje final), neto = bruto − tara, producto
@@ -484,7 +525,25 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F4.
 - Criterio de aceptación: comparación contra un cálculo manual; una
   diferencia distinta de 0 **no** causa rechazo automático del sistema.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado**. Implementación:
+  `OrdenBusiness.calcularConciliacion` (método privado compartido por
+  `registrarPesajeFinal` y `consultarConciliacion`, para que ambos
+  devuelvan exactamente el mismo cálculo): `netoKg = pesoBrutoKg -
+  taraKg`; `productoCargadoKg` = última masa acumulada **ACEPTADA**
+  del snapshot (`Orden.masaAcumuladaKg`, no el `presetKg`);
+  `diferenciaKg = netoKg - productoCargadoKg`, sin tolerancia ni
+  redondeo a porcentaje. Todo con `BigDecimal`, sin `setScale`
+  explícito (sin redondeo silencioso). Evidencia: verificado con los
+  tres signos de `diferenciaKg` contra un cálculo manual — tara 12000/
+  bruto 16000/masa 4000 → diferencia `0.000`; tara 12000/bruto 16080/
+  masa 4000 → `80.000`; tara 12000/bruto 15900/masa 4000 → `-100.000`;
+  ninguno de los tres fue rechazado por el sistema. **Confirmado además
+  por consulta directa de BD, ejecutada por el usuario**, contra los
+  valores persistidos (no solo la respuesta HTTP) para los seis
+  orderNumber de esta unidad — misma tabla que TP16, incluida una
+  cuarta diferencia (`+500.000`, orden 1792624403, ganadora de la
+  carrera de pesaje final). Detalle completo en
+  `docs/contrato-f4-pesaje-conciliacion.md`.
 
 ### TP19 — Promedios de temperatura, densidad y caudal
 - Descripción: promedio de cada variable sobre el detalle almacenado,
@@ -501,7 +560,14 @@ y descarte de lecturas: `docs/fuentes.md`.
   detalle conocido; si no hay muestras almacenadas, la ausencia de
   promedio se documenta explícitamente, no se devuelve 0 como si fuera un
   promedio real.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: pendiente, promedios en sí **diferidos explícitamente a F6**
+  (no adelantados en esta unidad). La alternativa admitida para el
+  parcial (último valor recibido en vez de promedio) **sí** quedó
+  cubierta en esta unidad: la conciliación expone
+  `ultimaTemperaturaC`/`ultimaDensidad`/`ultimoCaudalKgH`, nombrados
+  explícitamente como últimos valores, no como promedios — ver
+  `docs/contrato-f4-pesaje-conciliacion.md`. Implementación: —
+  (promedio real, sin implementar). Evidencia: —.
 
 ### TP20 — Timestamps de cada evento del ciclo
 - Descripción: fecha/hora de recepción inicial, de pesaje inicial, de
@@ -516,20 +582,23 @@ y descarte de lecturas: `docs/fuentes.md`.
   timestamp; documentar qué evento exacto dispara cada marca (ej.: no
   igualar automáticamente "tara" con "inicio real de carga", porque T1
   los describe como pasos distintos).
-- Estado: en curso — `fechaRecepcion` (recepción/creación), `fechaTara`
-  (pesaje inicial), `fechaActivacion`, `fechaInicioCarga` (primera
-  lectura aceptada, ver TP10-TP13) y, desde esta unidad, `fechaFinCarga`
-  (cierre explícito 2→3, TP15) están verificados. `fechaFinCarga` se
-  fija igual a `fechaUltimaLectura` (última lectura VÁLIDA), no al
-  instante de la llamada al endpoint de cierre — **DECISIÓN DEL EQUIPO**
-  explícita de esta unidad, ver `docs/contrato-f4-cierre.md`; el instante
-  real de esa llamada se audita por separado en `HistorialEstado`. Solo
-  el pesaje final queda pendiente (TP16, resto de F4).
+- Estado: **verificado** — los cinco eventos de la fuente están
+  cubiertos: `fechaRecepcion` (recepción/creación), `fechaTara` (pesaje
+  inicial), `fechaActivacion`, `fechaInicioCarga` (primera lectura
+  aceptada, ver TP10-TP13), `fechaFinCarga` (cierre explícito 2→3,
+  TP15) y, desde esta unidad, `fechaPesajeFinal` (pesaje final 3→4,
+  TP16). `fechaFinCarga` se fija igual a `fechaUltimaLectura` (última
+  lectura VÁLIDA, el valor que el sistema adopta, no una medición del
+  instante físico real — ver `docs/contrato-f4-cierre.md`), mientras
+  que `fechaPesajeFinal` sí es el instante real de la llamada al
+  endpoint de pesaje final (no derivado de ninguna otra fecha) —
+  distinción explícita entre ambos campos, ver
+  `docs/contrato-f4-pesaje-conciliacion.md`.
   Implementación: `Orden.fechaRecepcion`/`fechaTara`/`fechaActivacion`/
-  `fechaInicioCarga`/`fechaFinCarga`, generadas con zona explícita
-  `America/Argentina/Cordoba` (ver `docs/decisiones.md`). Evidencia:
-  timestamp persistido y devuelto en cada operación (recepción, tara,
-  activación, lectura, cierre).
+  `fechaInicioCarga`/`fechaFinCarga`/`fechaPesajeFinal`, generadas con
+  zona explícita `America/Argentina/Cordoba` (ver `docs/decisiones.md`).
+  Evidencia: timestamp persistido y devuelto en cada operación
+  (recepción, tara, activación, lectura, cierre, pesaje final).
 
 ### TP21 — Transiciones de estado unidireccionales y auditadas
 - Descripción: los estados avanzan 1→2→3→4 sin saltos ni retrocesos; cada
@@ -551,24 +620,32 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F2–F4.
 - Criterio de aceptación: un intento de salto o retroceso de estado se
   rechaza; se puede consultar la secuencia de transiciones de una orden.
-- Estado: en curso — la transición de creación (ninguno→1), la de tara
-  (1→2) y, desde esta unidad, el cierre (2→3, TP15) están verificadas,
-  incluyendo el rechazo de tara repetida y de cierre repetido (409); el
-  rechazo de saltos/retrocesos contra estado 4 no se puede probar
-  todavía porque el pesaje final (TP16) sigue pendiente. La activación
-  **no** agrega fila en `HistorialEstado` (decisión del equipo: no
-  cambia `estado`, ver `docs/decisiones.md`, sección F3). Implementación:
-  `ordenes/model/HistorialEstado.java` (no es la única estructura
-  posible, es la decisión del equipo para implementarlo). Evidencia:
-  cada recepción válida genera una fila con `estadoNuevo=1`, cada tara
-  válida genera una fila con `estadoNuevo=2`, cada cierre válido genera
-  una fila con `estadoNuevo=3` cuya `fechaHora` es el instante real de
-  la llamada al cierre (distinto de `fechaFinCarga` de la orden, ver
-  TP15/`docs/contrato-f4-cierre.md`); `usuarioOProceso` = usuario
-  autenticado (nunca del JSON) en los tres casos. **No verificado por
-  lectura directa de la fila nueva** (`estadoNuevo=3`) en esta sesión,
-  solo por inferencia de código y ausencia de error HTTP — ver límite en
-  `docs/contrato-f4-cierre.md`.
+- Estado: **verificado** — las cuatro transiciones del circuito
+  (ninguno→1, 1→2, 2→3 y, desde esta unidad, 3→4, TP16) están
+  implementadas y auditadas, incluyendo el rechazo de repetición en
+  cada una (409). La activación **no** agrega fila en `HistorialEstado`
+  (decisión del equipo: no cambia `estado`, ver `docs/decisiones.md`,
+  sección F3). Implementación: `ordenes/model/HistorialEstado.java`
+  (no es la única estructura posible, es la decisión del equipo para
+  implementarlo). Evidencia: cada recepción válida genera una fila con
+  `estadoNuevo=1`, cada tara válida con `estadoNuevo=2`, cada cierre
+  válido con `estadoNuevo=3`, cada pesaje final válido con
+  `estadoNuevo=4`; `usuarioOProceso` = usuario autenticado (nunca del
+  JSON) en los cuatro casos. **Verificado por lectura directa de BD
+  para `estadoNuevo=3`** (ver TP15, órdenes 940556/950632/960632: una
+  sola fila por orden, sin duplicados) **y para `estadoNuevo=4`**
+  (ejecutada por el usuario para las cinco órdenes que llegaron a
+  pesaje final en esta unidad — 1792624398/399/400/402/403: exactamente
+  una fila por orden, sin duplicados, `usuarioOProceso=qa_f1_dfab890c`
+  en las cinco y `fecha_hora` idéntica a `fechaPesajeFinal` en cada una;
+  la orden 1792624401, que quedó en estado 1, no generó ninguna fila
+  con `estadoNuevo=4`, confirmado por el mismo `LEFT JOIN`). Detalle
+  completo en `docs/contrato-f4-pesaje-conciliacion.md`. **Sin
+  verificar todavía por esa vía:** el contenido exacto de
+  `usuarioOProceso` para `estadoNuevo=1`/`2` (recepción/tara), y la
+  matriz completa de saltos/retrocesos entre todos los pares de
+  estados — solo se ejercitaron casos representativos por unidad, no
+  cada combinación posible.
 
 ### TP22 — Sin interfaz gráfica para el segundo parcial
 - Descripción: los puntos 1 a 5 se entregan como API, sin ninguna

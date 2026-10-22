@@ -762,3 +762,100 @@ decisiones y su origen.
   verificó en esta ronda el contenido exacto de `usuariooproceso` ni la
   relación entre `fecha_hora` de esa fila y el instante real de la
   llamada HTTP contra un valor esperado puntual.
+
+## F4 — segunda unidad: pesaje final y conciliación (TP16–TP18)
+
+Detalle completo del contrato en
+`docs/contrato-f4-pesaje-conciliacion.md`. Aquí las decisiones y su
+origen.
+
+- **Sin precondiciones adicionales a `estado==3` (a diferencia de
+  TP15):** el pesaje final no exige activación ni lecturas aceptadas
+  como chequeos propios — ya están garantizadas por el circuito: para
+  llegar a estado 3 la orden ya pasó por `cerrarCarga` (TP15), que sí
+  las exige. Agregar el mismo chequeo otra vez habría sido redundante,
+  no una protección adicional real.
+- **`productoCargadoKg` = última masa acumulada ACEPTADA del snapshot,
+  no el `presetKg` (CONFIRMADO por la fuente, no decisión del
+  equipo):** T1 distingue explícitamente el preset del producto
+  realmente cargado; `calcularConciliacion` usa
+  `Orden.masaAcumuladaKg`, nunca `presetKg`.
+- **`ultimaTemperaturaC`/`ultimaDensidad`/`ultimoCaudalKgH`, no
+  "promedio*" (DECISIÓN DEL EQUIPO sobre el nombre de los campos, no
+  sobre el cálculo):** el nombre del campo en la respuesta JSON
+  refleja explícitamente que son los últimos valores del snapshot, no
+  un promedio — para que un consumidor de la API no pueda confundirlos
+  con TP19 (promedios, diferido a F6) solo por el nombre del campo. El
+  valor en sí es simplemente `Orden.temperaturaC`/`densidad`/
+  `caudalKgH`, sin cálculo adicional.
+- **Sin validación cruzada entre `pesoBrutoKg` y `taraKg` (DECISIÓN DEL
+  EQUIPO, por instrucción explícita del usuario):** no se rechaza un
+  pesaje final cuyo bruto sea menor que la tara (neto negativo), ni se
+  aplica ninguna tolerancia o umbral a `diferenciaKg`. "No rechazar por
+  diferencia distinta de cero ni inventar tolerancias/porcentajes" fue
+  una instrucción explícita, no una interpretación de este equipo.
+- **Sin redondeo explícito:** `calcularConciliacion` usa
+  `BigDecimal.subtract` dos veces (`netoKg`, `diferenciaKg`) sin ningún
+  `setScale`; la precisión de los operandos recibidos/persistidos se
+  conserva íntegra.
+- **Cálculo compartido entre pesaje final y consulta
+  (`OrdenBusiness.calcularConciliacion`, privado):** para que
+  `registrarPesajeFinal` (TP16) y `consultarConciliacion` (TP17)
+  devuelvan exactamente el mismo resultado a partir de los mismos
+  valores persistidos, en vez de reimplementar el cálculo dos veces.
+  Devuelve `ar.edu.iua.iw3.ordenes.business.Conciliacion`, un POJO de
+  negocio nuevo (mismo patrón que `LecturaResultado`: no es un DTO de
+  controller).
+- **`consultarConciliacion` sin bloqueo pesimista (a diferencia de las
+  demás operaciones de negocio sobre `Orden`):** es una lectura simple
+  que no participa de ninguna transición de estado; no hay nada que
+  serializar. Se agregó `OrdenRepository.findByOrderNumber` (derivado,
+  sin `@Lock`) para esto, distinto de `findByOrderNumberForUpdate` (que
+  sigue siendo exclusivo de las operaciones que escriben).
+- **`fechaPesajeFinal` = instante real de la llamada (a diferencia de
+  `fechaFinCarga` en TP15):** no hay aquí una "última lectura" de la
+  que derivarlo — el pesaje final es un dato que llega en el momento en
+  que se registra, sin telemetría previa equivalente. Mismo truncado a
+  microsegundos que las fechas anteriores, mismo motivo de precisión de
+  columna `datetime(6)`.
+- **Pesaje final repetido sin excepción nueva:** mismo criterio que el
+  cierre repetido (TP15) — tras el primer pesaje exitoso la orden queda
+  en estado 4, así que un segundo intento cae en la misma rama de
+  rechazo `estado==3` que cualquier otro estado incompatible.
+- **Verificado con `curl` secuencial contra la app local (`mysqldev`,
+  MySQL ya levantado) y luego con `postman collection run` sobre
+  `postman/iw3-f4-pesaje-conciliacion.postman_collection.json` (19
+  requests, 21 aserciones, 0 fallos):** diferencia cero (tara 12000/
+  bruto 16000/masa 4000 → `0.000`), positiva (bruto 16080 → `80.000`) y
+  negativa (bruto 15900 → `-100.000`); pesaje final y conciliación
+  sobre orden inexistente (404) y en estados 1/2/3 incompatibles (409);
+  `pesoBrutoKg` ausente/no positivo/con 4 decimales (400 los tres);
+  pesaje final repetido (409); conciliación repetida (200, mismo
+  resultado); sin token (401).
+- **POST de pesaje final vs. GET de conciliación inmediatamente
+  posterior, sobre la misma orden: verificado idénticos** (comparación
+  JSON directa con `curl`, sin diferencias).
+- **Verificado con `curl` en paralelo (una carrera, no una prueba
+  exhaustiva de ambos órdenes posibles):** dos pesajes finales
+  concurrentes sobre la misma orden, con `pesoBrutoKg` distintos para
+  distinguir cuál ganó → una `200` (la que adquirió el lock primero), la
+  otra `409` ("no está en estado 3, estado actual: 4"); una conciliación
+  posterior confirmó que el valor persistido era el de la que ganó, no
+  el rechazado.
+- **Verificado por lectura directa de BD, ejecutada por el usuario (no
+  por esta sesión, sin acceso a cliente `mysql` ni `docker exec` en
+  este entorno, mismo límite que TP13/TP15):** consulta SQL puntual con
+  el nombre de columna ya corregido (`usuariooproceso`), para las seis
+  órdenes reales de esta unidad. **Resultado reportado por el
+  usuario:** `estado`/`taraKg`/`pesoBrutoKg`/`masaAcumuladaKg` y los
+  cálculos de `netoKg`/`diferenciaKg` coinciden exactamente con los ya
+  calculados a mano contra la respuesta HTTP (0.000 / 80.000 / -100.000
+  / 40.000 / 500.000 para 1792624398/399/400/402/403 respectivamente);
+  1792624401 (nunca llegó a pesaje final) muestra `estado=1` y esos
+  campos en `NULL`. La consulta del historial devolvió **exactamente
+  una fila con `estado_nuevo=4` por cada una de las cinco órdenes
+  finalizadas**, todas con `usuariooproceso=qa_f1_dfab890c` y
+  `fecha_hora` idéntica a `fecha_pesaje_final` de la orden
+  correspondiente; para 1792624401 el `LEFT JOIN` no devolvió ninguna
+  fila de historial. Detalle completo, con la tabla reportada, en
+  `docs/contrato-f4-pesaje-conciliacion.md`.

@@ -845,3 +845,120 @@ queda pendiente de iniciar.** No se tocó ningún archivo de esa fase en
 esta sesión. Antes de implementar, presentar el contrato de cierre y
 pesaje final (alcance, fuente, archivos afectados, verificación) y
 esperar validación, según la sección 1 de las reglas del equipo.
+
+*(Nota de orden, agregada en la entrada de la segunda unidad de F4: el
+párrafo anterior describe el estado al cerrar F3, antes de empezar F4;
+el cierre 2→3 ya se implementó en la primera unidad de F4, documentada
+en la sección "F4 — primera unidad" más arriba. No se reescribe el
+historial.)*
+
+## F4 — segunda unidad: pesaje final y conciliación (TP16–TP18)
+
+**Alcance:** TP16 (pesaje final 3→4 con conciliación en la misma
+respuesta), TP17 (consulta posterior, solo estado 4) y TP18 (fórmula de
+la conciliación). No incluye TP19 (promedios), diferido a F6 — la
+conciliación de esta unidad expone los últimos valores de temperatura/
+densidad/caudal, identificados explícitamente como tales, no como
+promedios. Continúa en la misma rama `feature/f4-cierre-conciliacion`,
+desde el HEAD `88e1fbd` ("feat(f4): cierre explicito 2->3 (TP15),
+primera unidad de F4").
+
+**Resumen de decisiones:** sin precondiciones adicionales a
+`estado==3` (a diferencia de TP15): activación y lecturas aceptadas ya
+están garantizadas por el circuito al llegar a estado 3.
+`productoCargadoKg` = última masa acumulada ACEPTADA del snapshot
+(`Orden.masaAcumuladaKg`), nunca `presetKg` — confirmado por la fuente,
+no decisión del equipo. `ultimaTemperaturaC`/`ultimaDensidad`/
+`ultimoCaudalKgH` son los últimos valores del snapshot, sin ningún
+cálculo adicional, nombrados así deliberadamente para no confundirlos
+con TP19. Sin validación cruzada entre `pesoBrutoKg` y `taraKg`, sin
+tolerancia ni redondeo a `diferenciaKg` — por instrucción explícita del
+usuario. Cálculo compartido entre pesaje final y consulta
+(`OrdenBusiness.calcularConciliacion`, privado, devuelve el POJO de
+negocio nuevo `Conciliacion`). `consultarConciliacion` sin bloqueo
+pesimista (lectura simple, no participa de ninguna transición). Mismo
+bloqueo `PESSIMISTIC_WRITE`/transacción que las operaciones anteriores
+para `registrarPesajeFinal`. Pesaje final repetido rechazado por el
+mismo chequeo `estado==3`, sin excepción nueva. Detalle completo y
+justificación de cada punto en
+`docs/contrato-f4-pesaje-conciliacion.md` y `docs/decisiones.md`,
+sección "F4 — segunda unidad".
+
+**Evidencia — HTTP real contra la app corriendo (`mysqldev`, MySQL ya
+levantado):** diferencia cero (tara 12000/bruto 16000/masa 4000 →
+`0.000`), positiva (bruto 16080 → `80.000`) y negativa (bruto 15900 →
+`-100.000`), ninguna rechazada; pesaje final y conciliación sobre orden
+inexistente (404) y en estados 1/2/3 incompatibles (409, mensajes
+distintos); `pesoBrutoKg` ausente/no positivo/con 4 decimales (400 los
+tres); pesaje final repetido (409, estado actual 4); conciliación
+repetida (200, mismo resultado cada vez); sin token (401). **POST de
+pesaje final vs. GET de conciliación inmediatamente posterior, sobre la
+misma orden: verificado idénticos.** Carrera de dos pesajes finales
+concurrentes con `curl` en paralelo: una `200`, una `409`, confirmado
+por una conciliación posterior (el valor persistido coincidió con el
+que ganó, no con el rechazado) — una sola corrida observada, no
+exhaustiva de ambos órdenes de llegada. Confirmado además con
+`postman collection run` sobre
+`postman/iw3-f4-pesaje-conciliacion.postman_collection.json`: **19
+requests, 21 aserciones, 0 fallos** (no ejercita diferencia cero/
+negativa ni la carrera, mismo límite documentado que las colecciones
+anteriores). `GET /v3/api-docs` confirma ambos paths nuevos y los
+esquemas `PesajeFinalRequest`/`ConciliacionResponse`.
+
+**Verificación directa de BD, ejecutada y confirmada por el usuario**
+(esta sesión no tuvo acceso a cliente MySQL ni `docker exec`, mismo
+límite que TP13/TP15): consulta puntual con el nombre de columna ya
+corregido `usuariooproceso`, para las seis órdenes reales de esta
+sesión (1792624398/399/400/401/402/403). Resultado reportado: `estado`,
+`taraKg`, `pesoBrutoKg`, `masaAcumuladaKg` y los cálculos de
+`netoKg`/`diferenciaKg` coinciden exactamente con los valores ya
+verificados por HTTP (0.000/80.000/-100.000/40.000/500.000); 1792624401
+(sin pesaje final) muestra `estado=1` y esos campos en `NULL`. El
+historial muestra exactamente una fila `estado_nuevo=4` por cada una de
+las cinco órdenes finalizadas, actor `qa_f1_dfab890c`, `fecha_hora`
+idéntica a `fechaPesajeFinal`; ninguna fila de historial para
+1792624401. Detalle completo, con la tabla reportada, en
+`docs/contrato-f4-pesaje-conciliacion.md`.
+
+**Archivos nuevos/modificados:**
+- `model/Orden.java` (`pesoBrutoKg`, `fechaPesajeFinal`, nuevos).
+- `model/persistence/OrdenRepository.java` (`findByOrderNumber`, nuevo,
+  sin bloqueo).
+- `business/Conciliacion.java` (nuevo, POJO de negocio).
+- `business/IOrdenBusiness.java`/`OrdenBusiness.java`
+  (`registrarPesajeFinal`, `consultarConciliacion`,
+  `calcularConciliacion`).
+- `controllers/dto/PesajeFinalRequest.java`,
+  `ConciliacionResponse.java` (nuevos).
+- `controllers/OrdenRestController.java` (endpoints `/pesaje-final` y
+  `/conciliacion`, OpenAPI).
+- `postman/iw3-f4-pesaje-conciliacion.postman_collection.json` (nuevo).
+- `docs/contrato-f4-pesaje-conciliacion.md` (nuevo), `docs/requisitos.md`,
+  `docs/decisiones.md`, este archivo.
+
+**F4 sigue abierta.** TP15–TP18 quedan verificados para el alcance del
+parcial, ahora incluida evidencia directa de BD para las dos unidades.
+TP19 (promedios) diferido a F6, decisión ya tomada, no evidencia
+faltante por accidente. No se decidió todavía si corresponde cerrar F4
+ni se cerró el segundo parcial (TP22 en adelante).
+
+**Criterios de salida de F4 todavía sin evidencia completa (usando lo
+ya registrado en ambas unidades, sin repetir pruebas):**
+- Concurrencia: cada una de las tres carreras documentadas (cierre/
+  cierre, cierre/lectura, pesaje final/pesaje final) se observó en una
+  sola corrida; no hay evidencia de que el orden de llegada contrario
+  también se resuelva correctamente, solo del orden efectivamente
+  observado.
+- Matriz de saltos/retrocesos: solo se ejercitaron casos
+  representativos por unidad (p. ej. cierre/pesaje final sobre una
+  orden en estado 1), no cada combinación posible entre los cuatro
+  estados.
+- Sin prueba de un caso real de `500` en ninguna unidad de F4; sin
+  verificación de comportamiento ante caída de conexión a mitad de
+  transacción.
+- `usuarioOProceso` para `estadoNuevo=1`/`2` (recepción/tara) no se
+  verificó todavía por lectura directa de BD (sí por HTTP); solo
+  `estadoNuevo=3`/`4` tienen esa confirmación directa.
+- Densidad (duda de rango/unidad, heredada de F3) sigue sin resolver.
+- TP22 en adelante (sin UI, Swagger/Postman completos, roles, alarmas)
+  no corresponden a F4 y no se evaluaron aquí.

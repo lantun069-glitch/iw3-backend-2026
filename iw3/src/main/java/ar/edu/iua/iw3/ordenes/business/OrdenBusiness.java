@@ -359,6 +359,95 @@ public class OrdenBusiness implements IOrdenBusiness {
 		}
 	}
 
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public Conciliacion registrarPesajeFinal(Integer orderNumber, BigDecimal pesoBrutoKg, String actor)
+			throws NotFoundException, InvalidStateException, BusinessException {
+		try {
+			// Mismo bloqueo que registrarTara/activar/registrarLectura/
+			// cerrarCarga: quien pierde la carrera por el lock relee la
+			// orden ya en estado 4 y se rechaza por el chequeo de estado.
+			Orden orden = ordenDAO.findByOrderNumberForUpdate(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+
+			if (orden.getEstado() != 3) {
+				// Cubre tambien el pesaje final repetido: tras el primer
+				// pesaje exitoso la orden queda en estado 4 y esta misma
+				// rama lo rechaza.
+				throw InvalidStateException.builder().message("La orden orderNumber=" + orderNumber
+						+ " no esta en estado 3 (estado actual: " + orden.getEstado() + ")").build();
+			}
+
+			LocalDateTime ahora = LocalDateTime.now(ZONA_RECEPCION).truncatedTo(ChronoUnit.MICROS);
+
+			orden.setPesoBrutoKg(pesoBrutoKg);
+			orden.setFechaPesajeFinal(ahora);
+			orden.setEstado(4);
+			orden = ordenDAO.save(orden);
+
+			HistorialEstado historial = new HistorialEstado();
+			historial.setOrden(orden);
+			historial.setEstadoNuevo(4);
+			historial.setFechaHora(ahora);
+			historial.setUsuarioOProceso(actor);
+			historialDAO.save(historial);
+
+			return calcularConciliacion(orden);
+		} catch (NotFoundException | InvalidStateException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
+	}
+
+	@Override
+	public Conciliacion consultarConciliacion(Integer orderNumber)
+			throws NotFoundException, InvalidStateException, BusinessException {
+		try {
+			// Sin bloqueo: lectura simple, no participa de ninguna
+			// transicion de estado (TP17).
+			Orden orden = ordenDAO.findByOrderNumber(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+
+			if (orden.getEstado() != 4) {
+				throw InvalidStateException.builder().message("La orden orderNumber=" + orderNumber
+						+ " no esta en estado 4 (estado actual: " + orden.getEstado() + ")").build();
+			}
+
+			return calcularConciliacion(orden);
+		} catch (NotFoundException | InvalidStateException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
+	}
+
+	/**
+	 * Calculo de conciliacion (TP18), compartido por registrarPesajeFinal
+	 * y consultarConciliacion para que ambos devuelvan exactamente el
+	 * mismo resultado a partir de los mismos valores persistidos.
+	 * productoCargadoKg = ultima masa acumulada ACEPTADA del snapshot
+	 * (no el preset: ver docs/requisitos.md, TP18). No hay redondeo
+	 * explicito: BigDecimal.subtract conserva toda la precision de los
+	 * operandos. Los tres ultimos campos son los ULTIMOS VALORES del
+	 * snapshot de telemetria, no promedios (TP19, diferido a F6).
+	 * Precondicion (no verificada aqui, ya garantizada por el circuito):
+	 * al llegar a estado 3/4 el snapshot de telemetria no puede ser nulo,
+	 * porque cerrarCarga exige al menos una lectura aceptada antes de
+	 * transicionar a 3, y ninguna operacion posterior lo modifica.
+	 */
+	private Conciliacion calcularConciliacion(Orden orden) {
+		BigDecimal netoKg = orden.getPesoBrutoKg().subtract(orden.getTaraKg());
+		BigDecimal diferenciaKg = netoKg.subtract(orden.getMasaAcumuladaKg());
+		return new Conciliacion(orden.getOrderNumber(), orden.getTaraKg(), orden.getPesoBrutoKg(), netoKg,
+				orden.getMasaAcumuladaKg(), diferenciaKg, orden.getTemperaturaC(), orden.getDensidad(),
+				orden.getCaudalKgH());
+	}
+
 	private String causaMasEspecifica(Throwable e) {
 		Throwable t = e;
 		while (t.getCause() != null && t.getCause() != t) {

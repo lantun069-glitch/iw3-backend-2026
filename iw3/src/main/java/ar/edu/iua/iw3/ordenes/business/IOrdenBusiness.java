@@ -74,4 +74,30 @@ public interface IOrdenBusiness {
 	 */
 	public Orden cerrarCarga(Integer orderNumber, String actor)
 			throws NotFoundException, InvalidStateException, BusinessException;
+
+	/**
+	 * Pesaje final (bruto), transicion 3-&gt;4 (TP16). Requiere que la
+	 * orden exista y este en estado 3; un pesaje final repetido se
+	 * rechaza por el mismo chequeo de estado (la orden ya quedo en 4).
+	 * Guarda pesoBrutoKg y fechaPesajeFinal (instante real de esta
+	 * llamada, no derivado de otra fecha), transiciona a 4 y audita la
+	 * transicion en HistorialEstado (actor, misma fecha/hora). Devuelve
+	 * la conciliacion calculada en la misma operacion (TP16/TP18), con el
+	 * mismo calculo que consultarConciliacion. Misma proteccion de
+	 * concurrencia (PESSIMISTIC_WRITE) que registrarTara/activar/
+	 * registrarLectura/cerrarCarga.
+	 */
+	public Conciliacion registrarPesajeFinal(Integer orderNumber, BigDecimal pesoBrutoKg, String actor)
+			throws NotFoundException, InvalidStateException, BusinessException;
+
+	/**
+	 * Consulta de la conciliacion (TP17), sin escrituras. Requiere que la
+	 * orden exista y este en estado 4; se puede llamar repetidas veces,
+	 * siempre devuelve el mismo calculo (TP18) a partir de los valores ya
+	 * persistidos (tara, pesoBrutoKg, ultima masa acumulada/temperatura/
+	 * densidad/caudal del snapshot). No usa bloqueo pesimista: es una
+	 * lectura simple, no participa de ninguna transicion de estado.
+	 */
+	public Conciliacion consultarConciliacion(Integer orderNumber)
+			throws NotFoundException, InvalidStateException, BusinessException;
 }
