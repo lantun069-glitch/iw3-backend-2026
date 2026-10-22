@@ -989,3 +989,36 @@ decisiones y su origen.
 - Esta entrada queda sin commit/push/merge, en la rama
   `feature/f6-roles-permisos` (creada desde `develop` en `a264ada`),
   por instrucción explícita de la sesión.
+
+## F6 — frecuencia configurable de persistencia del histórico (TP14)
+
+Detalle completo, matriz de casos y evidencia en
+`docs/contrato-f6-frecuencia-historico.md`. Aquí solo las decisiones y
+su origen.
+
+- `detalleIntervaloSegundos` (segundos, opcional, por orden), nombre
+  del campo, que se fije únicamente en la recepción y sin forma de
+  modificarlo después en esta unidad, y la política de primera/
+  siguiente lectura (primera siempre se guarda; siguientes solo si
+  pasó el intervalo desde el último detalle **guardado**, no desde la
+  última lectura recibida) son **DECISIÓN DEL EQUIPO**, aprobada
+  explícitamente por el usuario. La fuente solo describe el fenómeno
+  (recibir cada segundo, guardar cada diez) sin especificar ningún
+  mecanismo de configuración.
+- No forzar un detalle adicional al cerrar la carga, para igualar
+  `fechaUltimaLectura` con `fechaUltimoDetalleGuardado`, es
+  **decisión del equipo** — no se afirma que la fuente lo prohíba ni
+  que hacerlo la contradiga; simplemente no hace falta para cumplir lo
+  que pide, porque la fuente ya describe que la mayoría de las
+  lecturas recibidas no se guardan.
+- Las 19 órdenes creadas antes de esta unidad quedaron con
+  `detalleIntervaloSegundos`/`fechaUltimoDetalleGuardado` en `NULL`
+  (columnas nuevas, `ddl-auto=update` en el entorno local) — verificado
+  por consulta directa, no asumido. Por diseño (intervalo `null` =
+  guardar cada lectura aceptada), siguen funcionando igual que antes;
+  se confirmó con una lectura real sobre una de ellas. El mecanismo de
+  migración para un despliegue real (no `ddl-auto=update`) queda fuera
+  de alcance de esta unidad.
+- Esta entrada queda sin commit/push/merge, en la rama
+  `feature/f6-frecuencia-historico` (creada desde `develop` en
+  `e1bacb4`), por instrucción explícita de la sesión.

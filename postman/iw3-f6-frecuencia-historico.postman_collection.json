@@ -1,0 +1,549 @@
+{
+	"info": {
+		"name": "iw3 - F6 Frecuencia configurable del historico (TP14)",
+		"description": "Verifica, solo por lo observable via HTTP, la entrada de TP14 (detalleIntervaloSegundos en la recepcion de la orden) y el comportamiento de aceptacion/descarte de lecturas sobre una orden con intervalo configurado. No afirma persistencia del detalle historico: eso requiere lectura directa de BD, ya verificada y documentada (consultas SQL y resultados) en docs/contrato-f6-frecuencia-historico.md. Esta coleccion no repite esa verificacion.\n\nCasos: intervalo omitido (201, null en la respuesta); intervalo 0 y negativo (400 en ambos, con mensaje de validacion); intervalo valido (201, devuelto igual en la respuesta); y, sobre una orden con intervalo valido ya activada, una lectura aceptada y una descartada (ambas 200, el campo aceptada distingue el resultado).\n\nDatos nuevos por corrida: orderNumber y externalCode se generan en el pre-request de Login a partir de la hora actual, para no colisionar entre ejecuciones. Usuario/clave y el token de la corrida quedan unicamente en variables de COLECCION (testUsername/testPassword por --env-var, jwtToken capturado de la respuesta de login); ninguno se imprime ni se exporta a variables de entorno/globales.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "00 - Login",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "{{testUsername}}",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "{{testPassword}}",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/login",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"login"
+					]
+				}
+			},
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"// Datos nuevos por corrida: no reutiliza orderNumber/externalCode entre ejecuciones.",
+							"var base = Date.now() % 1000000000;",
+							"pm.collectionVariables.set('orderNumberOmitido', String(base));",
+							"pm.collectionVariables.set('orderNumberCero', String(base + 1));",
+							"pm.collectionVariables.set('orderNumberNegativo', String(base + 2));",
+							"pm.collectionVariables.set('orderNumberValido', String(base + 3));",
+							"pm.collectionVariables.set('extSuffix', String(base));"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('login responde 200', function () { pm.response.to.have.status(200); });",
+							"pm.collectionVariables.set('jwtToken', pm.response.text());"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "TP14 - detalleIntervaloSegundos en la recepcion",
+			"item": [
+				{
+					"name": "Recepcion sin detalleIntervaloSegundos (omitido) -> 201",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"orderNumber\": {{orderNumberOmitido}}, \"fechaCargaPrevista\": \"2026-11-03T08:30:00\", \"presetKg\": 10000.500, \"camion\": {\"externalCode\": \"CAM-TP14-{{extSuffix}}A\", \"patente\": \"TP14{{extSuffix}}A\", \"capacidadKg\": 12000.000}, \"chofer\": {\"externalCode\": \"CHO-TP14-{{extSuffix}}A\", \"nombre\": \"Test\", \"apellido\": \"TP14\"}, \"cliente\": {\"externalCode\": \"CLI-TP14-{{extSuffix}}A\", \"razonSocial\": \"Cliente TP14 {{extSuffix}}A\"}, \"producto\": {\"externalCode\": \"PRD-TP14-{{extSuffix}}A\", \"nombre\": \"GLP\"}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+									"pm.test('detalleIntervaloSegundos es null en la respuesta', function () {",
+									"    pm.expect(pm.response.json().detalleIntervaloSegundos).to.be.null;",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Recepcion con detalleIntervaloSegundos = 0 -> 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"orderNumber\": {{orderNumberCero}}, \"fechaCargaPrevista\": \"2026-11-03T08:30:00\", \"presetKg\": 10000.500, \"detalleIntervaloSegundos\": 0, \"camion\": {\"externalCode\": \"CAM-TP14-{{extSuffix}}B\", \"patente\": \"TP14{{extSuffix}}B\", \"capacidadKg\": 12000.000}, \"chofer\": {\"externalCode\": \"CHO-TP14-{{extSuffix}}B\", \"nombre\": \"Test\", \"apellido\": \"TP14\"}, \"cliente\": {\"externalCode\": \"CLI-TP14-{{extSuffix}}B\", \"razonSocial\": \"Cliente TP14 {{extSuffix}}B\"}, \"producto\": {\"externalCode\": \"PRD-TP14-{{extSuffix}}B\", \"nombre\": \"GLP\"}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('400 Bad Request', function () { pm.response.to.have.status(400); });",
+									"pm.test('mensaje de validacion, sin detalle interno', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.message).to.include('detalleIntervaloSegundos');",
+									"    pm.expect(body.devInfo).to.eql('No stack trace');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Recepcion con detalleIntervaloSegundos = -5 -> 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"orderNumber\": {{orderNumberNegativo}}, \"fechaCargaPrevista\": \"2026-11-03T08:30:00\", \"presetKg\": 10000.500, \"detalleIntervaloSegundos\": -5, \"camion\": {\"externalCode\": \"CAM-TP14-{{extSuffix}}C\", \"patente\": \"TP14{{extSuffix}}C\", \"capacidadKg\": 12000.000}, \"chofer\": {\"externalCode\": \"CHO-TP14-{{extSuffix}}C\", \"nombre\": \"Test\", \"apellido\": \"TP14\"}, \"cliente\": {\"externalCode\": \"CLI-TP14-{{extSuffix}}C\", \"razonSocial\": \"Cliente TP14 {{extSuffix}}C\"}, \"producto\": {\"externalCode\": \"PRD-TP14-{{extSuffix}}C\", \"nombre\": \"GLP\"}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('400 Bad Request', function () { pm.response.to.have.status(400); });",
+									"pm.test('mensaje de validacion, sin detalle interno', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.message).to.include('detalleIntervaloSegundos');",
+									"    pm.expect(body.devInfo).to.eql('No stack trace');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Recepcion con detalleIntervaloSegundos = 5 (valido) -> 201",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"orderNumber\": {{orderNumberValido}}, \"fechaCargaPrevista\": \"2026-11-03T08:30:00\", \"presetKg\": 10000.500, \"detalleIntervaloSegundos\": 5, \"camion\": {\"externalCode\": \"CAM-TP14-{{extSuffix}}D\", \"patente\": \"TP14{{extSuffix}}D\", \"capacidadKg\": 12000.000}, \"chofer\": {\"externalCode\": \"CHO-TP14-{{extSuffix}}D\", \"nombre\": \"Test\", \"apellido\": \"TP14\"}, \"cliente\": {\"externalCode\": \"CLI-TP14-{{extSuffix}}D\", \"razonSocial\": \"Cliente TP14 {{extSuffix}}D\"}, \"producto\": {\"externalCode\": \"PRD-TP14-{{extSuffix}}D\", \"nombre\": \"GLP\"}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+									"pm.test('detalleIntervaloSegundos devuelto = 5', function () {",
+									"    pm.expect(pm.response.json().detalleIntervaloSegundos).to.eql(5);",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "TP14 - lecturas aceptada/descartada (orden con intervalo valido)",
+			"item": [
+				{
+					"name": "Tara sobre la orden con intervalo valido -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberValido}}/tara",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberValido}}",
+								"tara"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"taraKg\": 12000.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+									"pm.collectionVariables.set('claveActivacion', pm.response.json().claveActivacion);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Activacion -> 200",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberValido}}/activacion",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberValido}}",
+								"activacion"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"clave\": {{claveActivacion}}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 OK', function () { pm.response.to.have.status(200); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Lectura aceptada -> 200, aceptada=true",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberValido}}/lecturas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberValido}}",
+								"lecturas"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"masaAcumuladaKg\": 1000.000, \"densidad\": 0.5400, \"temperaturaC\": 18.50, \"caudalKgH\": 3000.000}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+									"pm.test('aceptada = true, sin motivoDescarte', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.aceptada).to.be.true;",
+									"    pm.expect(body.motivoDescarte).to.be.null;",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Lectura descartada (caudal <= 0) -> 200, aceptada=false",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwtToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderNumberValido}}/lecturas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderNumberValido}}",
+								"lecturas"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"masaAcumuladaKg\": 9999.000, \"densidad\": 0.9900, \"temperaturaC\": 99.00, \"caudalKgH\": 0}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 OK (descarte no es un error)', function () { pm.response.to.have.status(200); });",
+									"pm.test('aceptada = false, motivoDescarte = caudal_no_positivo', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.aceptada).to.be.false;",
+									"    pm.expect(body.motivoDescarte).to.eql('caudal_no_positivo');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "testUsername",
+			"value": "",
+			"type": "string",
+			"description": "Usuario con ROLE_SUPERVISOR. Definir por --env-var. No versionar valores reales."
+		},
+		{
+			"key": "testPassword",
+			"value": "",
+			"type": "string",
+			"description": "NUNCA versionar un valor real aca."
+		},
+		{
+			"key": "jwtToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "orderNumberOmitido",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "orderNumberCero",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "orderNumberNegativo",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "orderNumberValido",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "extSuffix",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "claveActivacion",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

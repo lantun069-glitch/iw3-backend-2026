@@ -297,3 +297,41 @@ Detalle completo: `docs/decisiones.md`, sección "F4 — cierre".
      `ROLE_OPERADOR`? (No se tomó por supuesto: se ejecutó un segundo
      circuito completo —"Orden B"— enteramente con `ROLE_SUPERVISOR`
      para confirmarlo con evidencia, no solo por lectura del código.)
+
+## F6 — segunda unidad: frecuencia configurable del histórico (TP14)
+
+- **Qué hace:** agrega `detalleIntervaloSegundos` (por orden, opcional,
+  fijado solo al recibir la orden). Sin configurar, se guarda cada
+  lectura aceptada (igual que antes). Configurado, solo se guarda la
+  primera lectura y luego una cada intervalo cumplido, contado desde el
+  último detalle **guardado**, no desde la última lectura recibida.
+- **Por qué:** TP14 exige que la frecuencia de persistencia sea
+  configurable y distinta de la de recepción; el mecanismo concreto es
+  decisión del equipo, no texto literal de la fuente.
+- **Concepto de clase:** separar dos responsabilidades que antes
+  coincidían siempre (actualizar el snapshot vs. escribir el
+  histórico) — el snapshot sigue siendo incondicional, el histórico
+  pasa a ser una muestra.
+- **Cómo comprobarlo:** verificado por consulta SQL directa, no solo
+  por la respuesta HTTP — una orden con intervalo=5s generó 2 filas de
+  detalle en 3 lecturas (la intermedia, enviada antes de cumplirse el
+  intervalo, no generó fila pero sí actualizó el snapshot).
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué el intervalo se mide desde el último detalle *guardado*
+     y no desde la última *lectura recibida*? (Porque si se midiera
+     desde la última lectura, una lectura descartada por caudal/masa
+     inválida, o una que no generó detalle por no cumplir el
+     intervalo, correría el ancla sin haber guardado nada — se
+     perdería el control real de cuántos segundos pasaron desde el
+     último dato efectivamente persistido.)
+  2. ¿Qué pasa con las órdenes creadas antes de esta unidad? (Las
+     columnas nuevas quedan en `NULL` porque no existían al crearse esas
+     órdenes; un intervalo `null` significa "guardar cada lectura
+     aceptada", así que siguen funcionando exactamente igual que antes
+     — se confirmó con una lectura real sobre una de ellas, no solo
+     por lectura del esquema.)
+  3. ¿Por qué no se fuerza un detalle al cerrar la carga, para que el
+     histórico siempre termine con la última lectura? (Es una decisión
+     del equipo, no una exigencia de la fuente: la fuente ya describe
+     que la mayoría de las lecturas recibidas no se guardan: forzar la
+     última porque es la última no hacía falta para cumplir eso.)

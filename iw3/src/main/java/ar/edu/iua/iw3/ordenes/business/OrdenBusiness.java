@@ -108,6 +108,9 @@ public class OrdenBusiness implements IOrdenBusiness {
 			orden.setPresetKg(request.getPresetKg());
 			orden.setEstado(1);
 			orden.setFechaRecepcion(ahora);
+			// TP14 (F6): null = guardar cada lectura aceptada. Fijado solo
+			// aca; esta unidad no agrega forma de modificarlo despues.
+			orden.setDetalleIntervaloSegundos(request.getDetalleIntervaloSegundos());
 
 			try {
 				orden = ordenDAO.save(orden);
@@ -283,16 +286,40 @@ public class OrdenBusiness implements IOrdenBusiness {
 			if (orden.getFechaInicioCarga() == null) {
 				orden.setFechaInicioCarga(ahora);
 			}
+
+			// TP14 (F6): el snapshot de arriba se actualiza siempre, sin
+			// condicion alguna (TP12, ya verificado en F3). El detalle
+			// historico es lo unico que se filtra por frecuencia:
+			// - detalleIntervaloSegundos null (toda orden de F2-F5, y toda
+			//   orden de esta unidad que no lo configuro al recibirla):
+			//   guarda cada lectura aceptada, igual que siempre.
+			// - Con intervalo configurado: la primera lectura aceptada de
+			//   la orden siempre se guarda (fechaUltimoDetalleGuardado
+			//   todavia null); las siguientes solo si paso al menos el
+			//   intervalo desde el ULTIMO DETALLE GUARDADO (no desde la
+			//   ultima lectura recibida, que puede haber sido descartada o
+			//   no haber generado detalle). Misma variable "ahora" para la
+			//   comparacion, el snapshot y el detalle: evita una ventana
+			//   donde la decision de guardar o no se tome contra un
+			//   instante distinto del que efectivamente se persiste.
+			Integer intervalo = orden.getDetalleIntervaloSegundos();
+			boolean guardarDetalle = intervalo == null || orden.getFechaUltimoDetalleGuardado() == null
+					|| ChronoUnit.SECONDS.between(orden.getFechaUltimoDetalleGuardado(), ahora) >= intervalo;
+			if (guardarDetalle) {
+				orden.setFechaUltimoDetalleGuardado(ahora);
+			}
 			orden = ordenDAO.save(orden);
 
-			DetalleCarga detalle = new DetalleCarga();
-			detalle.setOrden(orden);
-			detalle.setMasaAcumuladaKg(masaAcumuladaKg);
-			detalle.setDensidad(densidad);
-			detalle.setTemperaturaC(temperaturaC);
-			detalle.setCaudalKgH(caudalKgH);
-			detalle.setFechaLectura(ahora);
-			detalleCargaDAO.save(detalle);
+			if (guardarDetalle) {
+				DetalleCarga detalle = new DetalleCarga();
+				detalle.setOrden(orden);
+				detalle.setMasaAcumuladaKg(masaAcumuladaKg);
+				detalle.setDensidad(densidad);
+				detalle.setTemperaturaC(temperaturaC);
+				detalle.setCaudalKgH(caudalKgH);
+				detalle.setFechaLectura(ahora);
+				detalleCargaDAO.save(detalle);
+			}
 
 			return new LecturaResultado(orden, true, null);
 		} catch (NotFoundException | InvalidStateException e) {

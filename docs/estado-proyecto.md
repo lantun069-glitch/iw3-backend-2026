@@ -1178,3 +1178,62 @@ los cambios quedan en el árbol de trabajo de `feature/f6-roles-permisos`.
 **Próximo paso:** confirmar con el usuario la siguiente unidad de F6
 (alarmas TP28/TP29, frecuencia configurable TP14, o promedios TP19) y
 recién entonces commitear esta unidad.
+
+## F6 — segunda unidad: frecuencia configurable del histórico (TP14)
+
+**Alcance:** persistencia configurable del detalle histórico de
+telemetría (`DetalleCarga`), por orden, distinta de la frecuencia de
+recepción. No cubre TP19 (promedios): queda pendiente, con una
+consecuencia explícita (el histórico queda muestreado cuando hay
+intervalo configurado). Rama `feature/f6-frecuencia-historico`, creada
+desde `develop` en `e1bacb4`.
+
+**Resumen:** campo opcional `detalleIntervaloSegundos` (segundos, por
+orden, fijado solo en la recepción) y `fechaUltimoDetalleGuardado` en
+`Orden`. El snapshot sigue actualizándose con toda lectura aceptada
+sin condición (sin cambios respecto de la unidad anterior); el detalle
+histórico se guarda siempre si no hay intervalo configurado (incluida
+toda orden previa a esta unidad), y si hay intervalo, en la primera
+lectura aceptada y luego solo cuando pasó ese intervalo desde el
+último detalle guardado. `0`/negativos en el campo de entrada
+devuelven 400. Detalle completo en
+`docs/contrato-f6-frecuencia-historico.md`.
+
+**Verificación:** compilación limpia; arranque local con el perfil de
+desarrollo (Hibernate agregó las columnas nuevas); verificado por HTTP
+**y** por consulta SQL directa (no solo por la respuesta HTTP, a
+pedido explícito): 400 ante 0/negativos; orden sin intervalo sigue
+generando un detalle por lectura (3/3); orden con intervalo de 5 s
+genera detalle en la 1ª lectura, no en la 2ª inmediata (snapshot sí
+actualizado), sí en la 3ª tras pasar el intervalo; las 19 órdenes
+previas a esta unidad quedaron con ambas columnas nuevas en `NULL` y
+una de ellas, ejercitada con una lectura real, siguió generando
+detalle con el comportamiento anterior. Completado después: una
+lectura descartada no modifica snapshot, histórico ni
+`fechaUltimoDetalleGuardado` (valores idénticos antes/después, SQL);
+dos órdenes con intervalos distintos (3 s y 8 s) con lecturas en los
+mismos instantes mantuvieron decisiones de persistencia independientes
+(3/3 y 2/3 filas de detalle, SQL). Colección Postman
+`postman/iw3-f6-frecuencia-historico.postman_collection.json` (9
+requests: intervalo omitido/0/-5/válido, tara/activación/lectura
+aceptada/descartada) corrida una vez: 9/9 requests, 15/15 aserciones,
+0 fallos — limitada a lo observable por HTTP, sin repetir la
+verificación SQL de persistencia.
+
+**TP14 verificado para el alcance implementado en esta unidad.** TP19
+(promedios) y TP28/TP29 (alarmas) siguen pendientes en F6.
+
+**Documentos actualizados:**
+`docs/contrato-f6-frecuencia-historico.md` (nuevo),
+`postman/iw3-f6-frecuencia-historico.postman_collection.json` (nuevo),
+`docs/requisitos.md` (TP14), `docs/decisiones.md`, `docs/defensa.md`,
+`OrdenRestController` (OpenAPI), este archivo.
+
+**Commit y push de esta unidad** en `feature/f6-frecuencia-historico`
+(ver checkpoint). **Sin integrar todavía a `develop`.** `main` y el
+tag `parcial-2-local-v1` no se tocaron.
+
+**Próximo paso:** acordar con el usuario la siguiente unidad de F6
+(TP19 promedios o TP28/TP29 alarmas) antes de implementarla, y evaluar
+la integración `feature/f6-frecuencia-historico` → `develop` cuando se
+autorice.

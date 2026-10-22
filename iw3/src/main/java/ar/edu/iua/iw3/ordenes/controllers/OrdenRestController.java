@@ -97,10 +97,13 @@ public class OrdenRestController extends BaseRestController {
 			description = "Crea una orden nueva en estado 1, o sincroniza camion/chofer/cliente/producto "
 					+ "por externalCode si ya existian. No acepta estado, id interno, fechaRecepcion ni el actor "
 					+ "del historial en el JSON de entrada: el servidor los genera. Requiere autenticacion JWT "
-					+ "(Authorization: Bearer <token>), igual que el resto de la API. Requiere el rol ROLE_SUPERVISOR (decision del equipo, TP27): ROLE_OPERADOR no puede recibir ordenes.")
+					+ "(Authorization: Bearer <token>), igual que el resto de la API. Requiere el rol ROLE_SUPERVISOR (decision del equipo, TP27): ROLE_OPERADOR no puede recibir ordenes. "
+				+ "detalleIntervaloSegundos (TP14, F6) es opcional: ausente/null guarda cada lectura aceptada "
+				+ "en el detalle historico (igual que toda orden de F2-F5); si se envia, debe ser entero > 0 y "
+				+ "queda fijo para esa orden (esta unidad no agrega forma de modificarlo despues).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "201", description = "Orden creada en estado 1.",
-					content = @Content(schema = @Schema(implementation = OrdenRecepcionResponse.class), examples = @ExampleObject(name = "Orden creada", value = "{\"id\":1,\"orderNumber\":900001,\"estado\":1,\"fechaRecepcion\":\"2026-10-20T20:06:30.119016859\"}"))),
+					content = @Content(schema = @Schema(implementation = OrdenRecepcionResponse.class), examples = @ExampleObject(name = "Orden creada", value = "{\"id\":1,\"orderNumber\":900001,\"estado\":1,\"fechaRecepcion\":\"2026-10-20T20:06:30.119016859\",\"detalleIntervaloSegundos\":null}"))),
 			@ApiResponse(responseCode = "400", description = "Entrada invalida: campo obligatorio ausente/vacio, texto que excede su longitud maxima, decimales fuera de precision, cantidad <= 0, o JSON malformado.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = {
 							@ExampleObject(name = "Campo obligatorio ausente", value = "{\"message\":\"camion.patente: must not be blank\",\"code\":400,\"devInfo\":\"No stack trace\"}"),
@@ -119,14 +122,17 @@ public class OrdenRestController extends BaseRestController {
 	@PreAuthorize("hasAuthority('ROLE_SUPERVISOR')")
 	public ResponseEntity<?> recibir(
 			@org.springframework.web.bind.annotation.RequestBody @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
-					content = @Content(examples = @ExampleObject(value = "{\"orderNumber\":900001,\"fechaCargaPrevista\":\"2026-11-03T08:30:00\",\"presetKg\":10000.500,\"camion\":{\"externalCode\":\"CAM-00891\",\"patente\":\"AB123CD\",\"descripcion\":\"Camion cisterna GLP\",\"capacidadKg\":12000.000},\"chofer\":{\"externalCode\":\"CHO-00457\",\"nombre\":\"Marcos\",\"apellido\":\"Toledo\",\"documento\":\"30111222\"},\"cliente\":{\"externalCode\":\"CLI-00019\",\"razonSocial\":\"Distribuidora del Sur S.A.\",\"contacto\":\"compras@distribuidorasur.com.ar\"},\"producto\":{\"externalCode\":\"PRD-GLP01\",\"nombre\":\"GLP\",\"descripcion\":\"Gas licuado de petroleo\"}}")))
+					content = @Content(examples = {
+							@ExampleObject(name = "Sin frecuencia configurada (guarda cada lectura aceptada)", value = "{\"orderNumber\":900001,\"fechaCargaPrevista\":\"2026-11-03T08:30:00\",\"presetKg\":10000.500,\"camion\":{\"externalCode\":\"CAM-00891\",\"patente\":\"AB123CD\",\"descripcion\":\"Camion cisterna GLP\",\"capacidadKg\":12000.000},\"chofer\":{\"externalCode\":\"CHO-00457\",\"nombre\":\"Marcos\",\"apellido\":\"Toledo\",\"documento\":\"30111222\"},\"cliente\":{\"externalCode\":\"CLI-00019\",\"razonSocial\":\"Distribuidora del Sur S.A.\",\"contacto\":\"compras@distribuidorasur.com.ar\"},\"producto\":{\"externalCode\":\"PRD-GLP01\",\"nombre\":\"GLP\",\"descripcion\":\"Gas licuado de petroleo\"}}"),
+							@ExampleObject(name = "Con frecuencia configurada (TP14, F6)", value = "{\"orderNumber\":900002,\"fechaCargaPrevista\":\"2026-11-03T08:30:00\",\"presetKg\":10000.500,\"detalleIntervaloSegundos\":10,\"camion\":{\"externalCode\":\"CAM-00891\",\"patente\":\"AB123CD\",\"descripcion\":\"Camion cisterna GLP\",\"capacidadKg\":12000.000},\"chofer\":{\"externalCode\":\"CHO-00457\",\"nombre\":\"Marcos\",\"apellido\":\"Toledo\",\"documento\":\"30111222\"},\"cliente\":{\"externalCode\":\"CLI-00019\",\"razonSocial\":\"Distribuidora del Sur S.A.\",\"contacto\":\"compras@distribuidorasur.com.ar\"},\"producto\":{\"externalCode\":\"PRD-GLP01\",\"nombre\":\"GLP\",\"descripcion\":\"Gas licuado de petroleo\"}}")
+						}))
 			OrdenRecepcionRequest request) {
 		// El actor viene del contexto de seguridad, nunca del JSON de entrada.
 		String actor = getUserLogged().getUsername();
 		try {
 			Orden orden = ordenBusiness.recibirOrden(request, actor);
 			OrdenRecepcionResponse body = new OrdenRecepcionResponse(orden.getId(), orden.getOrderNumber(),
-					orden.getEstado(), orden.getFechaRecepcion());
+					orden.getEstado(), orden.getFechaRecepcion(), orden.getDetalleIntervaloSegundos());
 			return new ResponseEntity<>(body, HttpStatus.CREATED);
 		} catch (FoundException e) {
 			// ex=null a proposito: no se expone la excepcion real al cliente.
@@ -240,6 +246,14 @@ public class OrdenRestController extends BaseRestController {
 					+ "masa<=0, o masa estrictamente menor a la ultima aceptada se descarta (aceptada=false, con "
 					+ "motivoDescarte): no es un error, siempre responde 200 y el snapshot queda sin cambios. "
 					+ "La primera lectura aceptada fija fechaInicioCarga; no se vuelve a modificar despues. "
+					+ "El snapshot (masaAcumuladaKg/densidad/temperaturaC/caudalKgH/fechaUltimaLectura) se "
+					+ "actualiza con TODA lectura aceptada, sin excepcion. El detalle historico (TP14, F6) "
+					+ "solo se guarda si la orden no configuro detalleIntervaloSegundos (guarda siempre, igual "
+					+ "que F2-F5), si es la primera lectura aceptada de la orden, o si paso al menos ese "
+					+ "intervalo desde el ULTIMO DETALLE GUARDADO (no desde la ultima lectura recibida). Con "
+					+ "intervalo configurado, fechaUltimaLectura del snapshot puede quedar por delante del "
+					+ "detalle mas reciente; no se fuerza un detalle adicional al cerrar la carga solo para "
+					+ "igualarlos (decision del equipo). "
 					+ "Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR (decision del equipo, TP27).")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Lectura procesada (aceptada o descartada; ver el campo aceptada).",

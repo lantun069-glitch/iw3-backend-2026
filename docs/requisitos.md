@@ -397,6 +397,44 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: con un intervalo configurado, una serie de
   lecturas de prueba produce la cantidad esperada de registros, sin
   afectar la frecuencia de recepción ni el refresco de pantalla.
+- Estado: **verificado**. Implementación: campo `detalleIntervaloSegundos`
+  (segundos, opcional, por orden, fijado solo en la recepción, validado
+  `>0` si se envía) y `fechaUltimoDetalleGuardado` en `Orden`;
+  `OrdenBusiness.registrarLectura()` filtra por intervalo únicamente el
+  `save()` de `DetalleCarga` — el snapshot sigue actualizándose con
+  toda lectura aceptada, sin condición (TP12, sin cambios). Nombre del
+  campo, unidad, que se fije solo en la recepción y la política de
+  primera/siguiente lectura son DECISIÓN DEL EQUIPO (detalle completo
+  en `docs/contrato-f6-frecuencia-historico.md`). Evidencia: 400 ante
+  `0` y negativos; orden sin intervalo sigue generando un detalle por
+  lectura aceptada (3/3, confirmado por SQL); orden con intervalo = 5 s
+  genera detalle en la 1ª lectura, no en la 2ª (inmediata, snapshot sí
+  actualizado), sí en la 3ª (pasado el intervalo) — confirmado por SQL,
+  no solo por la respuesta HTTP; las 19 órdenes previas a esta unidad
+  tienen ambas columnas nuevas en `NULL` y una de ellas (preexistente,
+  sin detalle previo) generó detalle normalmente ante una lectura
+  nueva, confirmando que siguen con el comportamiento anterior. Una
+  lectura descartada no modifica snapshot, histórico ni
+  `fechaUltimoDetalleGuardado` (valores idénticos antes/después,
+  confirmado por SQL); dos órdenes con intervalos distintos (3 s y 8 s)
+  con lecturas en los mismos instantes mantuvieron decisiones de
+  persistencia independientes (3/3 y 2/3 filas de detalle
+  respectivamente, confirmado por SQL). Colección Postman
+  `postman/iw3-f6-frecuencia-historico.postman_collection.json` (9
+  requests: intervalo omitido/0/-5/válido en la recepción, más tara/
+  activación/lectura aceptada/lectura descartada sobre la orden con
+  intervalo válido) ejecutada una vez vía Postman CLI: 9/9 requests,
+  15/15 aserciones, 0 fallos — aserciones limitadas a lo observable por
+  HTTP; la persistencia del detalle histórico sigue verificada por las
+  consultas SQL de arriba, no repetidas por esta colección. Consultas
+  SQL puntuales registradas como texto reproducible en
+  `docs/contrato-f6-frecuencia-historico.md`.
+  **TP14 verificado para el alcance implementado en esta unidad.**
+  Pendiente explícito: TP19 (promedios) todavía no implementado: el
+  histórico de una orden con intervalo configurado queda muestreado, no
+  contiene todas las lecturas aceptadas — a tener en cuenta cuando se
+  implemente ese promedio. TP28/TP29 (alarmas) tampoco implementados;
+  siguen pendientes en F6.
 - Estado: pendiente. **Confirmado explícitamente no adelantado en la
   segunda unidad de F3** (TP10-TP13): esa unidad guarda cada lectura
   aceptada en `DetalleCarga`, sin frecuencia configurable ni

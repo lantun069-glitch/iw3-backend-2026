@@ -20,4 +20,6 @@ public class OrdenRecepcionResponse {
 	private Integer orderNumber;
 	private Integer estado;
 	private LocalDateTime fechaRecepcion;
+	/** Null = guardar cada lectura aceptada (TP14, F6). Ver OrdenRecepcionRequest. */
+	private Integer detalleIntervaloSegundos;
 }

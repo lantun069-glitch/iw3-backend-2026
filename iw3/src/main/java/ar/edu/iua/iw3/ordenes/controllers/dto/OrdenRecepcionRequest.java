@@ -56,6 +56,18 @@ public class OrdenRecepcionRequest {
 	@Digits(integer = 12, fraction = 3)
 	private BigDecimal presetKg;
 
+	/**
+	 * Frecuencia de persistencia del detalle historico, en segundos
+	 * (TP14, F6). Opcional: ausente/null = guardar cada lectura aceptada
+	 * (igual que toda orden de F2-F5). Si se envia, debe ser entero > 0;
+	 * @Positive por si sola ya rechaza 0 y negativos con 400 y deja pasar
+	 * null (no se agrega @NotNull a proposito: este campo es opcional).
+	 * Fijado solo en esta recepcion: no hay forma de modificarlo despues
+	 * en esta unidad (DECISION DEL EQUIPO).
+	 */
+	@Positive
+	private Integer detalleIntervaloSegundos;
+
 	@Getter
 	@Setter
 	public static class CamionDTO {

@@ -166,4 +166,33 @@ public class Orden {
 
 	@Column
 	private LocalDateTime fechaPesajeFinal;
+
+	/**
+	 * Frecuencia de persistencia del detalle historico, en segundos
+	 * (TP14, F6). Null = guardar cada lectura aceptada (comportamiento de
+	 * F2-F5, tambien el de toda orden creada antes de esta unidad: la
+	 * columna no existia, asi que ninguna orden previa puede tener un
+	 * valor distinto de null aqui). Se fija unicamente en la recepcion;
+	 * esta unidad no agrega forma de modificarlo despues - DECISION DEL
+	 * EQUIPO, no exigencia de catedra. Validado en el DTO de entrada
+	 * (>0 si se envia); no se repite la validacion aqui.
+	 */
+	@Column
+	private Integer detalleIntervaloSegundos;
+
+	/**
+	 * Instante del ULTIMO detalle efectivamente persistido (no de la
+	 * ultima lectura recibida: eso sigue siendo fechaUltimaLectura). Null
+	 * hasta que exista al menos un detalle guardado. Para una orden sin
+	 * detalleIntervaloSegundos (incluida toda orden previa a esta unidad)
+	 * este campo no se usa para decidir nada: esas ordenes siguen
+	 * guardando cada lectura aceptada, por el null de detalleIntervaloSegundos
+	 * (ver OrdenBusiness.registrarLectura). Con intervalo configurado,
+	 * fechaUltimaLectura puede quedar por delante de este campo cuando una
+	 * lectura aceptada actualiza el snapshot pero no genera detalle nuevo
+	 * (DECISION DEL EQUIPO: no forzar un detalle en el cierre solo para
+	 * igualarlos).
+	 */
+	@Column
+	private LocalDateTime fechaUltimoDetalleGuardado;
 }
