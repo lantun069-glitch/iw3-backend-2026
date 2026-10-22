@@ -1,5 +1,6 @@
 package ar.edu.iua.iw3.ordenes.controllers;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,8 +28,10 @@ import ar.edu.iua.iw3.ordenes.business.IOrdenBusiness;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
 import ar.edu.iua.iw3.ordenes.business.LecturaResultado;
+import ar.edu.iua.iw3.ordenes.controllers.dto.AceptacionAlarmaRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ActivacionResponse;
+import ar.edu.iua.iw3.ordenes.controllers.dto.AlarmaResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.CierreResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ConciliacionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaRequest;
@@ -38,6 +41,7 @@ import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.PesajeFinalRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.TaraRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.TaraResponse;
+import ar.edu.iua.iw3.ordenes.model.Alarma;
 import ar.edu.iua.iw3.ordenes.model.Orden;
 import ar.edu.iua.iw3.util.IStandartResponseBusiness;
 import ar.edu.iua.iw3.util.StandartResponse;
@@ -429,6 +433,88 @@ public class OrdenRestController extends BaseRestController {
 					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
+	}
+
+	@Operation(summary = "Listar las alarmas de temperatura de una orden (TP28/TP29, F6)",
+			description = "Devuelve todas las alarmas de la orden (pendientes y aceptadas), ordenadas por fecha "
+					+ "de disparo. Requiere que la orden exista; no exige ningun estado en particular. Requiere "
+					+ "autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Lista de alarmas (puede estar vacia).",
+					content = @Content(array = @io.swagger.v3.oas.annotations.media.ArraySchema(schema = @Schema(implementation = AlarmaResponse.class)), examples = @ExampleObject(value = "[{\"id\":1,\"orderNumber\":900001,\"fechaDisparo\":\"2026-10-23T10:00:00.123456\",\"temperaturaC\":35.10,\"umbralAplicado\":33.00,\"aceptada\":false,\"fechaAceptacion\":null,\"usuarioAceptacion\":null,\"observacion\":null}]"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "404", description = "No existe una orden con ese orderNumber.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una orden con orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@GetMapping(value = "/{orderNumber}/alarmas", produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
+	public ResponseEntity<?> alarmas(@PathVariable Integer orderNumber) {
+		try {
+			List<Alarma> alarmas = ordenBusiness.listarAlarmas(orderNumber);
+			List<AlarmaResponse> body = alarmas.stream().map(this::aAlarmaResponse).collect(Collectors.toList());
+			return new ResponseEntity<>(body, HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (BusinessException e) {
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Operation(summary = "Aceptar una alarma de temperatura (TP29, F6)",
+			description = "Marca la alarma como aceptada, registrando el usuario autenticado (nunca el body) y "
+					+ "la fecha/hora del servidor; observacion es el unico campo opcional. La alarma debe existir "
+					+ "y pertenecer a esta orden (si no, 404 en ambos casos, sin distinguirlos). Una alarma ya "
+					+ "aceptada se rechaza con 409. Habilita que una lectura futura que vuelva a superar el "
+					+ "umbral genere una alarma nueva, aunque la temperatura no haya bajado (decision del "
+					+ "equipo). Requiere autenticacion JWT. Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Alarma aceptada.",
+					content = @Content(schema = @Schema(implementation = AlarmaResponse.class), examples = @ExampleObject(value = "{\"id\":1,\"orderNumber\":900001,\"fechaDisparo\":\"2026-10-23T10:00:00.123456\",\"temperaturaC\":35.10,\"umbralAplicado\":33.00,\"aceptada\":true,\"fechaAceptacion\":\"2026-10-23T10:05:00.654321\",\"usuarioAceptacion\":\"usuario_ejemplo\",\"observacion\":\"Lectura puntual, se normalizo\"}"))),
+			@ApiResponse(responseCode = "400", description = "observacion con mas de 500 caracteres, o JSON malformado.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"observacion: size must be between 0 and 500\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "404", description = "No existe la orden, o no existe una alarma con ese id para esa orden.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No existe una alarma id=1 para orderNumber=900001\",\"code\":404,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "409", description = "La alarma ya fue aceptada.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"La alarma id=1 ya fue aceptada\",\"code\":409,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@PostMapping(value = "/{orderNumber}/alarmas/{idAlarma}/aceptacion", consumes = MediaType.APPLICATION_JSON_VALUE,
+			produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
+	public ResponseEntity<?> aceptarAlarma(@PathVariable Integer orderNumber, @PathVariable Long idAlarma,
+			@org.springframework.web.bind.annotation.RequestBody(required = false) @Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(
+					content = @Content(examples = @ExampleObject(value = "{\"observacion\":\"Lectura puntual, se normalizo\"}")))
+			AceptacionAlarmaRequest request) {
+		String actor = getUserLogged().getUsername();
+		String observacion = request == null ? null : request.getObservacion();
+		try {
+			Alarma alarma = ordenBusiness.aceptarAlarma(orderNumber, idAlarma, actor, observacion);
+			return new ResponseEntity<>(aAlarmaResponse(alarma), HttpStatus.OK);
+		} catch (NotFoundException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.NOT_FOUND, null, e.getMessage()), HttpStatus.NOT_FOUND);
+		} catch (InvalidStateException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.CONFLICT, null, e.getMessage()), HttpStatus.CONFLICT);
+		} catch (BusinessException e) {
+			return new ResponseEntity<>(
+					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	private AlarmaResponse aAlarmaResponse(Alarma a) {
+		return new AlarmaResponse(a.getId(), a.getOrden().getOrderNumber(), a.getFechaDisparo(), a.getTemperaturaC(),
+				a.getUmbralAplicado(), a.isAceptada(), a.getFechaAceptacion(), a.getUsuarioAceptacion(),
+				a.getObservacion());
 	}
 
 	private ConciliacionResponse aConciliacionResponse(Conciliacion c) {

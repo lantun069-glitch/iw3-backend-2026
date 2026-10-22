@@ -372,3 +372,40 @@ Detalle completo: `docs/decisiones.md`, sección "F4 — cierre".
      estado 4 por el circuito normal, porque cerrar la carga ya exige
      al menos una lectura aceptada, y la primera lectura aceptada de
      toda orden siempre genera una fila de detalle.)
+
+## F6 — cuarta unidad: alarmas de temperatura (TP28/TP29, primera unidad)
+
+- **Qué hace:** configuración global de umbral/destinatarios; dispara
+  una alarma cuando una lectura aceptada supera el umbral, salvo que
+  ya haya una pendiente para esa orden; permite consultarlas y
+  aceptarlas (`ROLE_OPERADOR` o `ROLE_SUPERVISOR`), registrando
+  usuario y fecha/hora.
+- **Por qué:** T2 exige alarma configurable con supresión mientras
+  está pendiente; el correo en sí queda para la próxima unidad.
+- **Concepto de clase:** por qué el disparo y la aceptación comparten
+  el mismo bloqueo de fila (`PESSIMISTIC_WRITE`) que ya usaba
+  `registrarLectura` — para que una aceptación y un disparo
+  concurrentes sobre la misma orden no puedan decidir "no hay
+  pendiente" a la vez de forma inconsistente.
+- **Cómo comprobarlo:** una orden con `detalleIntervaloSegundos`
+  configurado (TP14) recibe una lectura que no genera detalle
+  histórico pero sí dispara una alarma — confirma que la alarma mira
+  la medición real, no el histórico muestreado.
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué la configuración de alarmas es global y no por orden,
+     si la frecuencia de persistencia (TP14) sí es por orden? (Decisión
+     del equipo: la fuente habla de un umbral único, en singular, sin
+     mencionar nunca una orden — a diferencia de TP14, donde la fuente
+     da el ejemplo explícito de "guardar cada 10 segundos" por carga.)
+  2. ¿Cómo se sabe que usuario y fecha/hora son obligatorios y solo la
+     observación es opcional, si la transcripción original tiene ruido
+     de reconocimiento de voz? (Se consultó el fragmento directo de la
+     fuente vía NotebookLM, no solo la respuesta ya interpretada: el
+     orden de palabras — usuario, fecha, hora, observación "opcional" —
+     deja ese calificativo pegado al último término. Es una lectura
+     razonable del fragmento, no una certeza absoluta.)
+  3. ¿Por qué un 404 no distingue "la alarma no existe" de "la alarma
+     existe pero es de otra orden"? (Mismo criterio que otras consultas
+     scoped por orden: no hace falta revelar que un id existe bajo otra
+     orden para resolver el caso de uso; ambos devuelven el mismo
+     mensaje genérico.)

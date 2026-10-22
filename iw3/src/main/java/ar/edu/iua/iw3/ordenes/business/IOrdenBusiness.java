@@ -1,6 +1,7 @@
 package ar.edu.iua.iw3.ordenes.business;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.business.execption.FoundException;
@@ -8,6 +9,7 @@ import ar.edu.iua.iw3.business.execption.NotFoundException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
+import ar.edu.iua.iw3.ordenes.model.Alarma;
 import ar.edu.iua.iw3.ordenes.model.Orden;
 
 public interface IOrdenBusiness {
@@ -99,5 +101,26 @@ public interface IOrdenBusiness {
 	 * lectura simple, no participa de ninguna transicion de estado.
 	 */
 	public Conciliacion consultarConciliacion(Integer orderNumber)
+			throws NotFoundException, InvalidStateException, BusinessException;
+
+	/**
+	 * Lista las alarmas de una orden (TP28/TP29, F6), mas recientes al
+	 * final. Requiere que la orden exista; no requiere ningun estado en
+	 * particular (una orden ya finalizada conserva sus alarmas). Sin
+	 * bloqueo: lectura simple.
+	 */
+	public List<Alarma> listarAlarmas(Integer orderNumber) throws NotFoundException, BusinessException;
+
+	/**
+	 * Acepta una alarma pendiente de una orden. Requiere que la orden
+	 * exista; la alarma debe existir Y pertenecer a esa orden (si no,
+	 * NotFoundException - 404, sin distinguir los dos casos). Una
+	 * alarma ya aceptada se rechaza con InvalidStateException (409).
+	 * actor viene del contexto de seguridad, nunca del body. Bloquea la
+	 * fila de la orden (mismo PESSIMISTIC_WRITE que registrarLectura)
+	 * para serializarse con un disparo concurrente de una alarma nueva
+	 * sobre la misma orden.
+	 */
+	public Alarma aceptarAlarma(Integer orderNumber, Long idAlarma, String actor, String observacion)
 			throws NotFoundException, InvalidStateException, BusinessException;
 }

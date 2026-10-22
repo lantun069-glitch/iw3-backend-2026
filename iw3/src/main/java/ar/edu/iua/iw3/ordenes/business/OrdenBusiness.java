@@ -6,6 +6,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -22,16 +23,20 @@ import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.CamionDTO;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ChoferDTO;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ClienteDTO;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ProductoDTO;
+import ar.edu.iua.iw3.ordenes.model.Alarma;
 import ar.edu.iua.iw3.ordenes.model.Camion;
 import ar.edu.iua.iw3.ordenes.model.Chofer;
 import ar.edu.iua.iw3.ordenes.model.Cliente;
+import ar.edu.iua.iw3.ordenes.model.ConfiguracionAlarma;
 import ar.edu.iua.iw3.ordenes.model.DetalleCarga;
 import ar.edu.iua.iw3.ordenes.model.HistorialEstado;
 import ar.edu.iua.iw3.ordenes.model.Orden;
 import ar.edu.iua.iw3.ordenes.model.Producto;
+import ar.edu.iua.iw3.ordenes.model.persistence.AlarmaRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.CamionRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.ChoferRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.ClienteRepository;
+import ar.edu.iua.iw3.ordenes.model.persistence.ConfiguracionAlarmaRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.DetalleCargaRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.HistorialEstadoRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.OrdenRepository;
@@ -77,6 +82,10 @@ public class OrdenBusiness implements IOrdenBusiness {
 	private HistorialEstadoRepository historialDAO;
 	@Autowired
 	private DetalleCargaRepository detalleCargaDAO;
+	@Autowired
+	private AlarmaRepository alarmaDAO;
+	@Autowired
+	private ConfiguracionAlarmaRepository configuracionAlarmaDAO;
 
 	@Override
 	@Transactional(rollbackFor = Exception.class)
@@ -322,6 +331,27 @@ public class OrdenBusiness implements IOrdenBusiness {
 				detalleCargaDAO.save(detalle);
 			}
 
+			// TP28/TP29 (F6, primera unidad): se evalua TODA lectura aceptada,
+			// incluso si TP14 no la guarda en el detalle (guardarDetalle=false
+			// arriba) - el umbral se compara contra la medicion real
+			// recibida, no contra lo muestreado. Sin fila de configuracion,
+			// no se evalua ninguna alarma (sin umbral por defecto inventado,
+			// DECISION DEL EQUIPO). Maximo una alarma pendiente por orden:
+			// se verifica bajo el mismo bloqueo de fila (PESSIMISTIC_WRITE)
+			// ya adquirido al principio de este metodo, serializandose con
+			// aceptarAlarma concurrente sobre la misma orden.
+			ConfiguracionAlarma config = configuracionAlarmaDAO.findById(ConfiguracionAlarma.ID_FIJO).orElse(null);
+			if (config != null && temperaturaC.compareTo(config.getUmbralTemperaturaC()) > 0
+					&& !alarmaDAO.existsByOrdenAndAceptadaFalse(orden)) {
+				Alarma alarma = new Alarma();
+				alarma.setOrden(orden);
+				alarma.setFechaDisparo(ahora);
+				alarma.setTemperaturaC(temperaturaC);
+				alarma.setUmbralAplicado(config.getUmbralTemperaturaC());
+				alarma.setAceptada(false);
+				alarmaDAO.save(alarma);
+			}
+
 			return new LecturaResultado(orden, true, null);
 		} catch (NotFoundException | InvalidStateException e) {
 			throw e;
@@ -496,6 +526,59 @@ public class OrdenBusiness implements IOrdenBusiness {
 		return new Conciliacion(orden.getOrderNumber(), orden.getTaraKg(), orden.getPesoBrutoKg(), netoKg,
 				orden.getMasaAcumuladaKg(), diferenciaKg, orden.getTemperaturaC(), orden.getDensidad(),
 				orden.getCaudalKgH(), promedioTemperaturaC, promedioDensidad, promedioCaudalKgH);
+	}
+
+	@Override
+	public List<Alarma> listarAlarmas(Integer orderNumber) throws NotFoundException, BusinessException {
+		try {
+			// Sin bloqueo: lectura simple, igual criterio que
+			// consultarConciliacion (TP17).
+			Orden orden = ordenDAO.findByOrderNumber(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+			return alarmaDAO.findByOrdenOrderByFechaDisparoAsc(orden);
+		} catch (NotFoundException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public Alarma aceptarAlarma(Integer orderNumber, Long idAlarma, String actor, String observacion)
+			throws NotFoundException, InvalidStateException, BusinessException {
+		try {
+			// Mismo bloqueo que registrarLectura: serializa la aceptacion
+			// con un disparo concurrente de una alarma nueva sobre la misma
+			// orden (evita que ambas transacciones decidan a la vez "no hay
+			// pendiente" y terminen creando/aceptando de forma inconsistente).
+			Orden orden = ordenDAO.findByOrderNumberForUpdate(orderNumber)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una orden con orderNumber=" + orderNumber).build());
+
+			Alarma alarma = alarmaDAO.findByIdAndOrden(idAlarma, orden)
+					.orElseThrow(() -> NotFoundException.builder()
+							.message("No existe una alarma id=" + idAlarma + " para orderNumber=" + orderNumber)
+							.build());
+
+			if (alarma.isAceptada()) {
+				throw InvalidStateException.builder()
+						.message("La alarma id=" + idAlarma + " ya fue aceptada").build();
+			}
+
+			alarma.setAceptada(true);
+			alarma.setFechaAceptacion(LocalDateTime.now(ZONA_RECEPCION).truncatedTo(ChronoUnit.MICROS));
+			alarma.setUsuarioAceptacion(actor);
+			alarma.setObservacion(observacion);
+			return alarmaDAO.save(alarma);
+		} catch (NotFoundException | InvalidStateException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+			throw BusinessException.builder().ex(e).build();
+		}
 	}
 
 	private String causaMasEspecifica(Throwable e) {

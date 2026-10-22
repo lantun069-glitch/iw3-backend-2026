@@ -1287,3 +1287,54 @@ DTOs), este archivo.
 **Próximo paso:** acordar con el usuario si F6 continúa con TP28/TP29
 (alarmas) o se considera suficiente para esta fase, y evaluar la
 integración `feature/f6-promedios` → `develop` cuando se autorice.
+
+## F6 — cuarta unidad: alarmas de temperatura, configuración/disparo/aceptación (TP28/TP29, primera unidad)
+
+**Alcance:** configuración global, disparo, consulta y aceptación de
+alarmas de temperatura. **No cubre el envío de correo** (unidad 2,
+pendiente): TP28/TP29 quedan parcialmente implementados hasta cubrir
+ambas. Rama `feature/f6-alarmas`, creada desde `develop` en `1f71db5`.
+
+**Resumen:** fila única de configuración (`umbralTemperaturaC` +
+`destinatarios`), `GET`/`PUT /api/v1/alarmas/configuracion` (solo
+`ROLE_SUPERVISOR`); sin fila, no se evalúa ninguna alarma (sin umbral
+por defecto). Disparo sobre toda lectura aceptada (incluso si TP14 no
+la guarda en el detalle), máximo una alarma pendiente por orden,
+congelando `temperaturaC`/`umbralAplicado` del momento del disparo.
+`GET`/`POST .../orders/{orderNumber}/alarmas[/{id}/aceptacion]`
+(`ROLE_OPERADOR` o `ROLE_SUPERVISOR`); aceptación repetida → 409;
+alarma inexistente o de otra orden → 404; tras aceptar, una lectura
+nueva genera una alarma nueva. Detalle completo en
+`docs/contrato-f6-alarmas-configuracion.md`.
+
+**Hallazgo:** un primer mapeo del controller de configuración dejó el
+path `/configuracion` solo en la constante base, sin agregarlo al
+método — Spring MVC, al no encontrar handler, reprodujo el mismo
+patrón de forward a `/error` → 401 ya documentado para otras causas
+(validación en F2, `AccessDeniedException` en TP27), ahora por una
+tercera causa (ruta sin handler). Corregido agregando el path
+explícito a cada mapeo.
+
+**Verificación:** compilación limpia; OpenAPI confirmado (5 endpoints
+nuevos); por HTTP y por SQL directo: validación de umbral/destinatarios,
+upsert de la configuración, disparo/supresión/re-disparo, descarte sin
+alarma, lectura muestreada por TP14 igual dispara, permisos (401/403),
+404/409 de aceptación, cross-order 404, máximo una pendiente por orden
+(0 violaciones confirmadas por SQL), aislamiento entre órdenes.
+Colección Postman acotada
+`postman/iw3-f6-alarmas-configuracion.postman_collection.json` (26
+requests) corrida una vez: 26/26 requests, 32/32 aserciones, 0 fallos.
+
+**Documentos actualizados:**
+`docs/contrato-f6-alarmas-configuracion.md` (nuevo),
+`postman/iw3-f6-alarmas-configuracion.postman_collection.json` (nuevo),
+`docs/requisitos.md` (TP28/TP29), `docs/decisiones.md`,
+`docs/defensa.md`, OpenAPI de los controllers afectados, este archivo.
+
+**Sin commit/push/merge** en esta unidad, por instrucción explícita.
+`main`, `develop` y el tag `parcial-2-local-v1` no se tocaron.
+
+**Próximo paso:** unidad 2 de TP28/TP29 (envío de correo, fuera del
+bloqueo de la orden, después del commit, con receptor local de
+pruebas), y luego evaluar la integración `feature/f6-alarmas` →
+`develop` cuando se autorice.

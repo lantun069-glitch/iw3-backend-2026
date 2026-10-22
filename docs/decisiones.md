@@ -1065,3 +1065,43 @@ su origen.
 - Esta entrada queda sin commit/push/merge, en la rama
   `feature/f6-promedios` (creada desde `develop` en `e5dbec3`), por
   instrucción explícita de la sesión.
+
+## F6 — alarmas de temperatura: configuración, disparo, consulta y aceptación (TP28/TP29, primera unidad)
+
+Detalle completo, verificación y hallazgo en
+`docs/contrato-f6-alarmas-configuracion.md`. Aquí solo las decisiones
+y su origen.
+
+- Configuración global (una sola fila, no por orden como
+  `detalleIntervaloSegundos` de TP14): **DECISIÓN DEL EQUIPO**. T2
+  habla de un único umbral en singular, sin mencionar nunca una orden.
+- Alcance "por orden" de la supresión mientras una alarma está
+  pendiente, y que el re-disparo tras aceptar no exija que la
+  temperatura haya bajado: **DECISIÓN DEL EQUIPO**, la cita de T2 no
+  lo confirma literalmente (solo dice "no debe enviarse nuevamente
+  hasta que no sea aceptada", sin precisar el alcance de "ese caso" ni
+  qué pasa si la condición nunca se resuelve).
+- Auditoría de aceptación (usuario y fecha/hora obligatorios,
+  observación el único campo opcional): apoyada en el fragmento
+  directo de T2 consultado vía NotebookLM — *"el registro de usuario
+  fecha ahora observación e opcional"* — pero el orden de palabras es
+  una interpretación razonable, no una demostración inequívoca de la
+  transcripción (criterio del equipo, no una cita que lo resuelva por
+  sí sola).
+- Rol para consulta/aceptación: `ROLE_OPERADOR` o `ROLE_SUPERVISOR`
+  (no solo supervisor) — la fuente habla de "un operario, un
+  operador... mirando esto" en lenguaje genérico, consistente con
+  permitir ambos roles, igual criterio que las operaciones
+  "compartidas" de TP27. Rol para la configuración global: solo
+  `ROLE_SUPERVISOR` (acción de política, no operación diaria).
+- `SUM`+`COUNT`/`AVG` no aplica aquí (sin promedios); se reutilizó en
+  cambio el mismo patrón de bloqueo de fila (`PESSIMISTIC_WRITE`) ya
+  usado por `registrarLectura`/`cerrarCarga`/etc. para coordinar el
+  disparo de una alarma con su aceptación concurrente.
+- El correo (TP28/TP29 completos) queda para una segunda unidad,
+  explícitamente fuera de esta entrega: debe enviarse después del
+  commit de la transacción, fuera del bloqueo de la orden, con un
+  receptor local de pruebas en vez de correos reales.
+- Esta entrada queda sin commit/push/merge, en la rama
+  `feature/f6-alarmas` (creada desde `develop` en `1f71db5`), por
+  instrucción explícita de la sesión.
