@@ -104,27 +104,37 @@ oculta.
   real de `DateTimeFormatter.ISO_OFFSET_DATE_TIME`), con y sin
   fracción, y aplica el offset `-03:00` correctamente.
 
-## Evidencia manual del usuario (2026-10-23)
+## Evidencia manual del usuario — verificación completa (2026-10-23)
 
-Confirmado en navegador real contra el backend real: el contador de
-tiempo transcurrido avanza segundo a segundo, y una captura mostró el
-formato `HH:mm:ss` con horas acumuladas **superiores a 24** sin
-reiniciar (reconfirmado en una entrada posterior de la misma sesión).
-También se confirmó que el valor de ETA permanece **fijo** mientras
-el contador sigue avanzando — el tick de 1 segundo nunca recalcula ni
-descuenta `etaMinutos`, solo cambia al volver a consultar el backend.
-Tres comportamientos puntuales de TP32/TP33 confirmados — **no
-equivale a verificar el resto de TP32/TP33**, que sigue pendiente (ver
-abajo).
+Confirmado en navegador real contra el backend real, en varias rondas
+de la misma sesión:
 
-## Pendiente explícito
+- El contador de tiempo transcurrido avanza segundo a segundo, con
+  horas acumuladas **superiores a 24** sin reiniciar.
+- El ETA permanece **fijo** mientras el contador sigue avanzando — el
+  tick de 1 segundo nunca recalcula ni descuenta `etaMinutos`.
+- Estados 1/3/4: contador y ETA ocultos (`—`).
+- Estado 2 sin lecturas todavía: **"Sin iniciar"** (contador) y **"No
+  estimable"** (ETA).
+- Orden `500321001` (creada para esta prueba, preset 5000 kg, masa
+  acumulada 5200 kg ≥ preset): ETA **"0.00 min"**, la orden permanece
+  en estado 2 sin cerrarse sola.
+- Orden `500321002` (creada para esta prueba): `fechaInicioCarga =
+  2026-10-23T11:47:28.23454-03:00`, contador `00:09:11` a las
+  `11:56:39` locales — coincide con la diferencia real (9 min 11 s).
+  `fechaUltimaLectura = 2026-10-23T11:48:01.96109-03:00` (distinta de
+  `fechaInicioCarga`, tras una segunda lectura) y `etaMinutos =
+  145.16`, ambos correctos.
 
-Revisión visual conjunta con el usuario, contra el backend y frontend
-reales: "Sin iniciar" sin activación, contador y ETA ocultos en
-1/3/4, "No estimable" sin datos/caudal ≤ 0, preset alcanzado sin
-cerrar la orden, e interpretación correcta del offset real (no la
-verificación aislada con Node). No se marca TP32/TP33 como
-"verificado" hasta esa revisión completa. No hay framework de pruebas
-automatizadas de UI instalado en este frontend; no se
-incorporó uno para esta unidad puntual, por instrucción explícita de
-no agregar funcionalidades nuevas fuera de alcance.
+**TP32/TP33 quedan verificados para este alcance** (ver
+`docs/requisitos.md`).
+
+## Límites aceptados (no ocultos)
+
+- Caudal ≤ 0: no es alcanzable por el flujo normal de la API
+  (`registrarLectura` lo descarta antes de persistir); se cubrió de
+  forma aislada con `OrdenBusinessEtaTest`, no visualmente.
+- No hay framework de pruebas automatizadas de UI instalado en este
+  frontend; no se incorporó uno para esta unidad, por instrucción
+  explícita de no agregar funcionalidades nuevas fuera de alcance —
+  toda la verificación de TP32/TP33 es manual, no automatizada.

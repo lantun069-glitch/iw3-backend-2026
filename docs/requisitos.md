@@ -1226,7 +1226,8 @@ y descarte de lecturas: `docs/fuentes.md`.
   3000 → 120 min, caso numérico de control ya documentado en
   CLAUDE.md §6, que tampoco es cita docente — ver la aclaración de
   arriba); caudal ≤ 0 o sin datos → null; masa ≥ preset → 0.
-- Estado: **implementado sin verificar**. Implementación:
+- Estado: **verificado** para el alcance acordado (2026-10-23).
+  Implementación:
   - Backend: `OrdenBusiness.calcularEtaMinutos(presetKg,
     masaAcumuladaKg, caudalKgH)`, invocado en `listarOrdenes` solo
     para filas en estado 2; expuesto como `etaMinutos` en
@@ -1240,15 +1241,25 @@ y descarte de lecturas: `docs/fuentes.md`.
     un caso de redondeo no exacto (128.57), un caso que distingue
     HALF_UP de HALF_EVEN (0.125→0.13), sin masa, sin caudal, caudal
     cero, caudal negativo, preset alcanzado exacto y preset superado.
-    Caudal ≤ 0 se prueba aislado a propósito: `registrarLectura` ya
-    descarta esas lecturas antes de persistir, por lo que ese caso no
-    es alcanzable por el flujo normal end-to-end (ver javadoc del
-    test). `./mvnw compile` → `BUILD SUCCESS` con el resto de la
-    unidad (DTO, business, controller). Frontend: `npm run build` y
-    `npm run lint` sin errores ni advertencias.
-  - **Pendiente explícito:** revisión visual conjunta con el usuario
-    (estados 1/3/4 ocultando el ETA en pantalla, caso real con
-    backend corriendo). No se marca "verificado" hasta esa revisión.
+    `./mvnw compile` → `BUILD SUCCESS` con el resto de la unidad (DTO,
+    business, controller). Frontend: `npm run build` y `npm run lint`
+    sin errores ni advertencias.
+  - **Evidencia manual del usuario en navegador real contra el
+    backend real (2026-10-23):** estados 1/3/4 muestran "—" en ETA
+    (oculto, como documentado); orden `500321001` creada para esta
+    prueba (preset 5000 kg, masa acumulada 5200 kg ≥ preset): ETA
+    muestra **"0.00 min"** y la orden permanece en estado 2, sin
+    cerrarse sola — confirma la rama "masa ≥ preset" sin forzar una
+    transición automática. El valor de ETA también se confirmó
+    **fijo** mientras el contador de tiempo transcurrido sigue
+    avanzando (ver TP33) — nunca se recalcula con el reloj local.
+  - **Límite aceptado, documentado y no oculto:** el caso "caudal ≤ 0"
+    no se probó visualmente porque no es alcanzable por el flujo
+    normal de la API (`registrarLectura` descarta esas lecturas antes
+    de persistir el snapshot) — se cubre con `OrdenBusinessEtaTest`
+    de forma aislada, ver arriba. Tampoco hay framework de pruebas
+    automatizadas de UI instalado en este frontend; la verificación
+    de esta unidad es manual, no automatizada.
 
 ### TP33 — Tiempo transcurrido, visible solo en estado 2
 - Descripción: tiempo transcurrido desde el inicio de la carga, visible
@@ -1280,7 +1291,8 @@ y descarte de lecturas: `docs/fuentes.md`.
   segundo contra `fechaInicioCarga` (sin solicitar nada al backend
   por el tick) y nunca simula avance de masa/caudal/ETA, que solo
   cambian al volver a consultar.
-- Estado: **implementado sin verificar**. Implementación:
+- Estado: **verificado** para el alcance acordado (2026-10-23).
+  Implementación:
   - Backend: `fechaInicioCarga` (ya existía en `Orden.java` desde F3)
     expuesto en `OrdenResumenResponse` como String ISO-8601 con
     offset explícito de `ZONA_RECEPCION` (nunca un `LocalDateTime`
@@ -1297,37 +1309,33 @@ y descarte de lecturas: `docs/fuentes.md`.
     correctamente un string con offset explícito de 6 dígitos de
     fracción de segundo (formato real que produce
     `DateTimeFormatter.ISO_OFFSET_DATE_TIME`), con y sin fracción.
-  - **Evidencia manual del usuario (2026-10-23, navegador real contra
-    el backend real):** el contador de tiempo transcurrido avanza un
-    segundo por segundo en pantalla (confirma que el tick de
-    `setInterval` + recálculo contra `Date.now()` funciona en
-    ejecución real, no solo en la lógica aislada); una captura mostró
-    el formato `HH:mm:ss` con horas acumuladas **superiores a 24**
-    sin reiniciar (ej. no vuelve a `00:xx:xx` al pasar las 24 h) —
-    reconfirmado en una entrada posterior de la misma sesión, sigue
-    vigente. Esto confirma puntualmente esos dos comportamientos de
-    TP33.
-  - **Evidencia manual del usuario, segunda ronda (2026-10-23):** el
-    valor de ETA permanece **fijo** mientras el contador de tiempo
-    transcurrido sigue avanzando segundo a segundo — confirma que el
-    tick de 1 segundo (`formatearTranscurrido`) nunca recalcula ni
-    descuenta `etaMinutos` (ese valor solo cambia al volver a
-    consultar el backend), tal como está documentado en
-    `docs/contrato-f7-tiempos-carga.md`. Ninguna de estas evidencias
-    equivale a verificar el resto de TP32/TP33 (ver pendientes abajo,
-    que se mantienen sin cambios).
-  - **Pendiente explícito (sin cambios por la evidencia de arriba):**
-    revisión visual conjunta con el usuario de: "Sin iniciar" sin
-    activación, contador y ETA ocultos en estados 1/3/4, "No
-    estimable" sin datos/caudal ≤ 0, preset alcanzado sin cerrar la
-    orden, e interpretación correcta del offset contra el backend
-    real (no solo la verificación aislada con Node). TP32/TP33 siguen
-    **implementados sin verificar** en conjunto. No hay framework de
+  - **Evidencia manual del usuario, navegador real contra el backend
+    real (2026-10-23, varias rondas de la misma sesión):** el
+    contador avanza un segundo por segundo en pantalla; una captura
+    mostró `HH:mm:ss` con horas acumuladas **superiores a 24** sin
+    reiniciar; el ETA permanece **fijo** mientras el contador avanza
+    (ver TP32). En una ronda final: estados 1/3/4 muestran "—" en el
+    contador (oculto, como documentado); estado 2 sin lecturas
+    todavía muestra **"Sin iniciar"** (y "No estimable" en ETA,
+    TP32) — confirma la convención del equipo para ese caso. Orden
+    `500321002`, creada para esta prueba: con `fechaInicioCarga =
+    2026-10-23T11:47:28.23454-03:00` y hora local aproximada
+    `11:56:39`, el contador mostró **`00:09:11`** — coincide con la
+    diferencia real (9 min 11 s), confirmando que el offset se
+    interpreta correctamente en un navegador real (no solo en la
+    verificación aislada con Node). La misma orden mostró
+    `fechaUltimaLectura = 2026-10-23T11:48:01.96109-03:00`
+    (distinta de `fechaInicioCarga`, tras una segunda lectura
+    posterior) y `etaMinutos = 145.16` — ambos valores correctos,
+    confirmando que la UI no confunde "última lectura" con "inicio de
+    carga".
+  - **Límite aceptado, documentado y no oculto:** no hay framework de
     pruebas automatizadas de UI instalado en este frontend
     (`package.json` sin Vitest/Jest/Testing Library); no se incorporó
-    uno para esta unidad puntual (fuera de alcance, ver instrucción de
-    no agregar funcionalidades nuevas) — estos casos quedan para la
-    revisión visual, no para un test automatizado nuevo.
+    uno para esta unidad (fuera de alcance, ver instrucción de no
+    agregar funcionalidades nuevas) — toda la verificación de TP32/
+    TP33 es manual, en navegador real contra el backend real, no
+    automatizada.
 
 ### TP34 — Visualización y aceptación de alarmas desde la UI
 - Descripción: gestión de alarmas de temperatura visible en la UI, con
