@@ -1359,11 +1359,47 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Alcance: final.
 - Fuente: T2 — "la visualización de conciliaciones, disponible solo para
   orden en el estado 4, que son las finalizadas."
+- **CONFIRMADO (T2, cita de arriba):** la visualización se restringe a
+  estado 4; no hizo falta NotebookLM, la cita ya estaba registrada.
 - Fase prevista: F7.
 - Criterio de aceptación: la UI solo muestra la vista en estado 4; el
   backend valida el estado de forma independiente de lo que la UI
   oculte.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado** para el alcance probado (2026-10-23).
+  Implementación (solo frontend; `GET /api/v1/orders/{orderNumber}/conciliacion`
+  reutilizado sin cambios de contrato ni de permisos — `ROLE_OPERADOR`/
+  `ROLE_SUPERVISOR`, mismos que el resto de `/orders`):
+  - `iw3-frontend`: `ConciliacionPage.tsx`/`.css` (ruta
+    `/ordenes/:orderNumber/conciliacion`), columna "Conciliación" en
+    `OrdersListPage` solo para filas en estado 4, formateo numérico
+    español (punto de miles, coma decimal) con decimales fijos según
+    la precisión real de cada campo, diferencia con signo explícito y
+    presentación neutral (una diferencia ≠ 0 no es un rechazo
+    automático). Detalle completo en
+    `docs/contrato-f7-conciliacion-ui.md` de `iw3-frontend`.
+  - **Evidencia manual del usuario, navegador real contra el backend
+    real (2026-10-23, varias rondas):** acceso desde Órdenes solo en
+    estado 4; orden `500321001` (estado 2, reusada de TP32/TP33)
+    muestra el mensaje de no finalizada, **sin badge "Finalizada" ni
+    datos de conciliación residuales** (corregido tras una revisión
+    visual: el badge solo se renderiza si la consulta trae datos,
+    limpiando el resultado anterior antes de cada consulta nueva);
+    orden `633433063` (estado 4) con diferencia **-100,000 kg** y
+    orden `915358` con diferencia **+80,000 kg** — valores
+    positivo/negativo con formato numérico español correcto, signo
+    preservado, presentación neutral; "Últimos valores" y "Promedios"
+    claramente diferenciados; espaciado/alineación corregidos
+    (incluye un token CSS inválido `--space-5` que existía también en
+    `WelcomePage.css`, corregido); "Volver a órdenes" conserva
+    filtro/página/orden.
+  - **Límites aceptados, documentados y no ocultos:** el 404 (orden
+    inexistente) solo se verificó por API (`curl`), no visualmente en
+    navegador. El caso de promedios `null` (orden sin ningún detalle
+    almacenado) no se ejercitó — es teóricamente inalcanzable por el
+    circuito normal, misma razón ya documentada en TP19/TP18 (toda
+    orden que llega a estado 3/4 ya tiene al menos una lectura
+    aceptada, que genera detalle). Sin framework de pruebas
+    automatizadas de UI instalado, igual que TP32/TP33.
 
 ### TP36 — Comprensión global y evaluación individual
 - Descripción: cada integrante debe poder explicar el funcionamiento
