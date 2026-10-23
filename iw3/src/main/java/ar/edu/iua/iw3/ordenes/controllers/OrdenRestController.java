@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import ar.edu.iua.iw3.business.execption.BusinessException;
@@ -26,6 +27,7 @@ import ar.edu.iua.iw3.controllers.Constants;
 import ar.edu.iua.iw3.ordenes.business.Conciliacion;
 import ar.edu.iua.iw3.ordenes.business.IOrdenBusiness;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidQueryParamException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
 import ar.edu.iua.iw3.ordenes.business.LecturaResultado;
 import ar.edu.iua.iw3.ordenes.controllers.dto.AceptacionAlarmaRequest;
@@ -36,6 +38,7 @@ import ar.edu.iua.iw3.ordenes.controllers.dto.CierreResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.ConciliacionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.LecturaResponse;
+import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenListadoResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.PesajeFinalRequest;
@@ -147,6 +150,44 @@ public class OrdenRestController extends BaseRestController {
 			return new ResponseEntity<>(
 					response.build(HttpStatus.INTERNAL_SERVER_ERROR, null, "Error interno al procesar la solicitud"),
 					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Operation(summary = "Listar ordenes para monitoreo, paginado y filtrable (TP31, F7)",
+			description = "Devuelve un resumen de ordenes (sin claveActivacion ni las entidades completas de "
+					+ "camion/chofer/cliente/producto, solo patenteCamion) para pantallas de monitoreo. "
+					+ "estado (opcional) filtra por un estado entre 1 y 4; sin filtro, devuelve todas. page "
+					+ "arranca en 0 (default 0); size va de 1 a 100 (default 20). sort tiene el formato "
+					+ "\"campo,direccion\" (default \"orderNumber,asc\"); campo debe ser uno de orderNumber, "
+					+ "estado, fechaUltimaLectura, presetKg o masaAcumuladaKg, y direccion asc o desc. Cuando el "
+					+ "campo de orden no es orderNumber, el resultado desempata por orderNumber ascendente para "
+					+ "que la paginacion sea estable entre llamadas. Los campos de telemetria "
+					+ "(masaAcumuladaKg/ultimaTemperaturaC/ultimaDensidad/ultimoCaudalKgH/fechaUltimaLectura) son "
+					+ "null si la orden todavia no tiene ninguna lectura aceptada. Requiere autenticacion JWT. "
+					+ "Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "Pagina de ordenes.",
+					content = @Content(schema = @Schema(implementation = OrdenListadoResponse.class), examples = @ExampleObject(value = "{\"content\":[{\"orderNumber\":900001,\"estado\":2,\"patenteCamion\":\"AB123CD\",\"presetKg\":10000.500,\"masaAcumuladaKg\":4000.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000,\"fechaUltimaLectura\":\"2026-10-21T10:00:00.123456\"}],\"page\":0,\"size\":20,\"totalElements\":1,\"totalPages\":1}"))),
+			@ApiResponse(responseCode = "400", description = "estado fuera de [1,4], page negativo, size fuera de [1,100], o sort con un campo/direccion no admitido.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"campo de orden no admitido: claveActivacion\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
+			@ApiResponse(responseCode = "403", description = "Autenticado pero sin ROLE_OPERADOR ni ROLE_SUPERVISOR.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"No tiene los permisos necesarios para esta operacion\",\"code\":403,\"devInfo\":\"No stack trace\"}"))),
+			@ApiResponse(responseCode = "500", description = "Error no clasificado al procesar la solicitud.",
+					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"Error interno al procesar la solicitud\",\"code\":500,\"devInfo\":\"No stack trace\"}")))
+	})
+	@GetMapping(value = "", produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("hasAnyAuthority('ROLE_OPERADOR','ROLE_SUPERVISOR')")
+	public ResponseEntity<?> listar(
+			@RequestParam(required = false) Integer estado,
+			@RequestParam(required = false) Integer page,
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) String sort) {
+		try {
+			OrdenListadoResponse body = ordenBusiness.listarOrdenes(estado, page, size, sort);
+			return new ResponseEntity<>(body, HttpStatus.OK);
+		} catch (InvalidQueryParamException e) {
+			return new ResponseEntity<>(response.build(HttpStatus.BAD_REQUEST, null, e.getMessage()), HttpStatus.BAD_REQUEST);
 		}
 	}
 

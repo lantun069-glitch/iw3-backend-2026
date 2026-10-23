@@ -32,4 +32,15 @@ public interface OrdenRepository extends JpaRepository<Orden, Long> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select o from Orden o where o.orderNumber = :orderNumber")
 	Optional<Orden> findByOrderNumberForUpdate(@Param("orderNumber") Integer orderNumber);
+
+	/**
+	 * Cuenta para la paginacion del listado de monitoreo (TP31, F7).
+	 * estado=null => sin filtro (cuenta todas). El listado en si
+	 * (OrdenBusiness.listarOrdenes) usa una consulta JPQL separada con
+	 * ORDER BY dinamico validado contra una lista explicita de campos -
+	 * no se puede expresar un ORDER BY dinamico en una @Query estatica,
+	 * por eso vive en la capa de negocio con EntityManager, no aqui.
+	 */
+	@Query("SELECT COUNT(o) FROM Orden o WHERE (:estado IS NULL OR o.estado = :estado)")
+	long contarPorEstado(@Param("estado") Integer estado);
 }

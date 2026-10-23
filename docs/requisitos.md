@@ -1128,16 +1128,46 @@ y descarte de lecturas: `docs/fuentes.md`.
   real del backend; filtros/orden probados con datos de ejemplo.
 - DATO FALTANTE: confirmar la frase exacta con la consigna escrita o el
   docente antes de decidir si se muestran camión y/o preset.
-- Estado: pendiente. Implementación: —. Evidencia: —. **DECISIÓN DEL
-  EQUIPO (cierre de F6, 2026-10-22):** el endpoint de listado/filtrado
-  de órdenes que este requisito necesita (hoy no existe: solo hay
-  endpoints de órdenes puntuales por `orderNumber`, ninguno que liste
-  o filtre varias) se implementa en **F7**, junto con el resto del
-  consumo que necesite la UI — no se adelanta en F6. Esto no es un
-  faltante de F6: la matriz ya asigna TP31 a F7; se registra la
-  precisión explícitamente para que no quede ambigüedad al cerrar F6.
-  No se marca ningún endpoint de consulta nuevo como cumplido por esta
-  nota.
+- Estado: **en curso** (2026-10-23, rama `feature/f7-monitoreo-ordenes`
+  en ambos repos, sin commit todavía al cerrar esta entrada — ver
+  checkpoint). Implementación:
+  - Backend: `GET /api/v1/orders` (estado opcional 1-4, `page`/`size`
+    paginados, `sort` limitado a una lista explícita de campos con
+    desempate estable por `orderNumber`), `OrdenBusiness.listarOrdenes`,
+    `OrdenResumenResponse`/`OrdenListadoResponse`,
+    `InvalidQueryParamException`. No expone `claveActivacion` ni las
+    entidades completas de camión/chofer/cliente/producto, solo
+    `patenteCamion`.
+  - Frontend: `ordersApi.ts`, `OrdersListPage.tsx`/`.css` (tabla,
+    filtro por estado, ordenamiento por columna, paginación,
+    actualización manual, "Sin datos" en nulos, cancelación de
+    solicitudes en vuelo para que una respuesta vieja no pise una más
+    reciente), ruta `/ordenes` protegida, enlace desde `WelcomePage`.
+  - Evidencia: backend compilado (`BUILD SUCCESS`) y verificado contra
+    el backend real corriendo (no mockeado) con la colección Postman
+    `postman/iw3-f7-monitoreo-ordenes.postman_collection.json` vía
+    Postman CLI: 15 requests, 22 assertions, 0 fallos (401 sin token,
+    403 sin rol, 200 con `ROLE_OPERADOR`/`ROLE_SUPERVISOR`, filtro por
+    estado, 400 en estado/page/size/sort inválidos, orden estable con
+    desempate, paginación sin huecos ni duplicados sobre 87 órdenes
+    reales dejadas por unidades anteriores). OpenAPI (`/v3/api-docs`)
+    expone el endpoint y ambos DTOs nuevos sin pasos manuales. Frontend:
+    `npm run build` (`tsc -b && vite build`) y `npm run lint` sin
+    errores ni advertencias.
+  - **Pendiente explícito: prueba visual en navegador real** (tabla,
+    filtro, ordenamiento, paginación, botón "Actualizar" y "Sin datos")
+    — no ejecutada todavía, por decisión explícita de pausar la sesión
+    antes de hacerla. No se marca TP31 como verificado ni completo
+    hasta hacerla.
+  - **DECISIÓN DEL EQUIPO (cierre de F6, 2026-10-22):** el endpoint de
+    listado/filtrado de órdenes que este requisito necesita (antes no
+    existía: solo había endpoints de órdenes puntuales por
+    `orderNumber`) se implementa en F7, junto con el resto del consumo
+    que necesite la UI — no se adelantó en F6.
+  - **DATO FALTANTE sin resolver:** la frase de T2 sobre "camión"/
+    "preset" sigue ambigua (ruido de ASR); se muestran patente de
+    camión y preset en la tabla como DECISIÓN DEL EQUIPO, no como
+    requisito confirmado.
 
 ### TP32 — ETA (tiempo estimado de llegada al preset)
 - Descripción: cálculo de ETA con preset, masa acumulada y caudal por

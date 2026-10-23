@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -18,12 +19,15 @@ import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.business.execption.FoundException;
 import ar.edu.iua.iw3.business.execption.NotFoundException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidQueryParamException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
+import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenListadoResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.CamionDTO;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ChoferDTO;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ClienteDTO;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest.ProductoDTO;
+import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenResumenResponse;
 import ar.edu.iua.iw3.ordenes.model.Alarma;
 import ar.edu.iua.iw3.ordenes.model.Camion;
 import ar.edu.iua.iw3.ordenes.model.Chofer;
@@ -42,6 +46,9 @@ import ar.edu.iua.iw3.ordenes.model.persistence.DetalleCargaRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.HistorialEstadoRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.OrdenRepository;
 import ar.edu.iua.iw3.ordenes.model.persistence.ProductoRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -89,6 +96,27 @@ public class OrdenBusiness implements IOrdenBusiness {
 	private ConfiguracionAlarmaRepository configuracionAlarmaDAO;
 	@Autowired
 	private ApplicationEventPublisher eventPublisher;
+
+	@PersistenceContext
+	private EntityManager em;
+
+	/** Tamanio de pagina por defecto y limites del listado de monitoreo
+	 * (TP31, F7): page arranca en 0; size entre 1 y 100. */
+	private static final int PAGE_SIZE_DEFAULT = 20;
+	private static final int PAGE_SIZE_MAX = 100;
+
+	/** Campos admitidos para ordenar el listado de monitoreo (TP31, F7),
+	 * mapeados a su path JPQL real. Lista cerrada: nunca se concatena un
+	 * nombre de campo recibido del cliente directamente en el JPQL, para
+	 * no exponer una inyeccion via el parametro sort. */
+	private static final Map<String, String> CAMPOS_ORDENABLES = Map.of(
+			"orderNumber", "o.orderNumber",
+			"estado", "o.estado",
+			"fechaUltimaLectura", "o.fechaUltimaLectura",
+			"presetKg", "o.presetKg",
+			"masaAcumuladaKg", "o.masaAcumuladaKg");
+
+	private static final String SORT_DEFAULT = "orderNumber,asc";
 
 	@Override
 	@Transactional(rollbackFor = Exception.class)
@@ -652,5 +680,66 @@ public class OrdenBusiness implements IOrdenBusiness {
 			producto.setDescripcion(dto.getDescripcion());
 		}
 		return productoDAO.save(producto);
+	}
+
+	@Override
+	public OrdenListadoResponse listarOrdenes(Integer estado, Integer page, Integer size, String sort)
+			throws InvalidQueryParamException {
+		if (estado != null && (estado < 1 || estado > 4)) {
+			throw InvalidQueryParamException.builder()
+					.message("estado debe estar entre 1 y 4, recibido: " + estado).build();
+		}
+
+		int paginaValida = (page != null) ? page : 0;
+		if (paginaValida < 0) {
+			throw InvalidQueryParamException.builder().message("page debe ser >= 0, recibido: " + page).build();
+		}
+
+		int tamanioValido = (size != null) ? size : PAGE_SIZE_DEFAULT;
+		if (tamanioValido < 1 || tamanioValido > PAGE_SIZE_MAX) {
+			throw InvalidQueryParamException.builder()
+					.message("size debe estar entre 1 y " + PAGE_SIZE_MAX + ", recibido: " + size).build();
+		}
+
+		String[] sortPartes = (sort != null ? sort : SORT_DEFAULT).split(",", 2);
+		if (sortPartes.length != 2) {
+			throw InvalidQueryParamException.builder()
+					.message("sort debe tener el formato campo,direccion, recibido: " + sort).build();
+		}
+		String campoSort = sortPartes[0].trim();
+		String direccionSort = sortPartes[1].trim().toLowerCase();
+
+		String campoJpql = CAMPOS_ORDENABLES.get(campoSort);
+		if (campoJpql == null) {
+			throw InvalidQueryParamException.builder()
+					.message("campo de orden no admitido: " + campoSort).build();
+		}
+		if (!direccionSort.equals("asc") && !direccionSort.equals("desc")) {
+			throw InvalidQueryParamException.builder()
+					.message("direccion de orden debe ser asc o desc, recibido: " + direccionSort).build();
+		}
+
+		StringBuilder orderBy = new StringBuilder(campoJpql).append(' ').append(direccionSort);
+		if (!campoSort.equals("orderNumber")) {
+			orderBy.append(", o.orderNumber asc");
+		}
+
+		String jpql = "SELECT NEW ar.edu.iua.iw3.ordenes.controllers.dto.OrdenResumenResponse("
+				+ "o.orderNumber, o.estado, c.patente, o.presetKg, o.masaAcumuladaKg, "
+				+ "o.temperaturaC, o.densidad, o.caudalKgH, o.fechaUltimaLectura) "
+				+ "FROM Orden o JOIN o.camion c "
+				+ "WHERE (:estado IS NULL OR o.estado = :estado) "
+				+ "ORDER BY " + orderBy;
+
+		TypedQuery<OrdenResumenResponse> query = em.createQuery(jpql, OrdenResumenResponse.class);
+		query.setParameter("estado", estado);
+		query.setFirstResult(paginaValida * tamanioValido);
+		query.setMaxResults(tamanioValido);
+		List<OrdenResumenResponse> contenido = query.getResultList();
+
+		long total = ordenDAO.contarPorEstado(estado);
+		int totalPaginas = (int) Math.ceil((double) total / tamanioValido);
+
+		return new OrdenListadoResponse(contenido, paginaValida, tamanioValido, total, totalPaginas);
 	}
 }

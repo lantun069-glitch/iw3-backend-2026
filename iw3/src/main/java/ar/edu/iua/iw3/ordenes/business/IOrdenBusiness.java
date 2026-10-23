@@ -7,7 +7,9 @@ import ar.edu.iua.iw3.business.execption.BusinessException;
 import ar.edu.iua.iw3.business.execption.FoundException;
 import ar.edu.iua.iw3.business.execption.NotFoundException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidActivationKeyException;
+import ar.edu.iua.iw3.ordenes.business.exception.InvalidQueryParamException;
 import ar.edu.iua.iw3.ordenes.business.exception.InvalidStateException;
+import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenListadoResponse;
 import ar.edu.iua.iw3.ordenes.controllers.dto.OrdenRecepcionRequest;
 import ar.edu.iua.iw3.ordenes.model.Alarma;
 import ar.edu.iua.iw3.ordenes.model.Orden;
@@ -123,4 +125,20 @@ public interface IOrdenBusiness {
 	 */
 	public Alarma aceptarAlarma(Integer orderNumber, Long idAlarma, String actor, String observacion)
 			throws NotFoundException, InvalidStateException, BusinessException;
+
+	/**
+	 * Listado paginado de ordenes para monitoreo (TP31, F7), sin
+	 * escrituras. estado (si no es null) debe estar en [1,4]; page debe
+	 * ser &gt;=0; size debe estar en [1,100] (si es null, usa el default
+	 * de 20); sort tiene el formato "campo,direccion" donde campo esta en
+	 * una lista explicita admitida y direccion es "asc" u "desc" (si es
+	 * null, usa "orderNumber,asc"). Cualquier valor fuera de estos
+	 * rangos/listas se rechaza con InvalidQueryParamException (400). El
+	 * orden de resultados siempre desempata por orderNumber ascendente
+	 * cuando el campo de orden no es orderNumber, para que la paginacion
+	 * sea estable entre llamadas. No expone claveActivacion ni las
+	 * entidades completas de camion/chofer/cliente/producto.
+	 */
+	public OrdenListadoResponse listarOrdenes(Integer estado, Integer page, Integer size, String sort)
+			throws InvalidQueryParamException;
 }

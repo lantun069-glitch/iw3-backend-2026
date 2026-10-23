@@ -1,0 +1,417 @@
+{
+  "info": {
+    "name": "iw3 - F7 Listado de ordenes para monitoreo (TP31)",
+    "description": "Verifica el listado paginado/filtrable de ordenes agregado en F7 (GET {{baseUrl}}/api/v1/orders): filtro opcional por estado (1-4, 400 si esta fuera de rango), paginacion (page>=0, size en [1,100], defaults 0/20), ordenamiento limitado a una lista explicita de campos con desempate estable por orderNumber, autorizacion ROLE_OPERADOR/ROLE_SUPERVISOR (401 sin token, 403 sin ninguno de los dos roles), y que la respuesta no expone claveActivacion ni las entidades completas de camion/chofer/cliente/producto (solo patenteCamion). No repite las validaciones de negocio de recepcion/tara/activacion/lecturas/cierre/pesaje-final ya cubiertas por las colecciones de F2-F5: esta coleccion asume que ya existen ordenes en distintos estados en la base (dejadas por ejecuciones previas de esas colecciones) y solo ejercita este endpoint de solo lectura.\n\nUsa los mismos 3 usuarios de prueba de iw3-f6-roles-permisos.postman_collection.json (operador, supervisor, sin rol). Ejecutar esa coleccion antes si la base esta vacia y se necesitan ordenes de ejemplo en varios estados.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Login (2 usuarios de prueba)",
+      "item": [
+        {
+          "name": "Login operador",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "{{operadorUsername}}", "type": "text" },
+                { "key": "password", "value": "{{operadorPassword}}", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login responde 200', function () { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set('tokenOperador', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login sin rol",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "{{sinRolUsername}}", "type": "text" },
+                { "key": "password", "value": "{{sinRolPassword}}", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login responde 200', function () { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set('tokenSinRol', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Sin token -> 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/v1/orders", "host": ["{{baseUrl}}"], "path": ["api", "v1", "orders"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('401 sin token', function () { pm.response.to.have.status(401); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Sin rol -> 403",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenSinRol}}" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/orders", "host": ["{{baseUrl}}"], "path": ["api", "v1", "orders"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('403 sin rol', function () { pm.response.to.have.status(403); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Listado sin filtro (defaults page=0 size=20)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": { "raw": "{{baseUrl}}/api/v1/orders", "host": ["{{baseUrl}}"], "path": ["api", "v1", "orders"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.test('page=0, size=20 por defecto', function () { pm.expect(body.page).to.eql(0); pm.expect(body.size).to.eql(20); });",
+              "pm.test('content.length <= size', function () { pm.expect(body.content.length).to.be.at.most(20); });",
+              "pm.test('totalPages coherente con totalElements/size', function () { pm.expect(body.totalPages).to.eql(Math.ceil(body.totalElements / body.size)); });",
+              "pm.test('ninguna fila expone claveActivacion ni camion/chofer/cliente/producto completos', function () {",
+              "  body.content.forEach(function (o) {",
+              "    pm.expect(o).to.not.have.property('claveActivacion');",
+              "    pm.expect(o).to.not.have.property('camion');",
+              "    pm.expect(o).to.not.have.property('chofer');",
+              "    pm.expect(o).to.not.have.property('cliente');",
+              "    pm.expect(o).to.have.property('patenteCamion');",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Filtro estado=4",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?estado=4",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [{ "key": "estado", "value": "4" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.test('todas las filas tienen estado=4', function () {",
+              "  body.content.forEach(function (o) { pm.expect(o.estado).to.eql(4); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - estado fuera de rango -> 400",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?estado=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [{ "key": "estado", "value": "5" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('400 estado invalido', function () { pm.response.to.have.status(400); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - page negativo -> 400",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?page=-1",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [{ "key": "page", "value": "-1" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('400 page invalido', function () { pm.response.to.have.status(400); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - size fuera de [1,100] -> 400 (size=0)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?size=0",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [{ "key": "size", "value": "0" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('400 size invalido (0)', function () { pm.response.to.have.status(400); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - size fuera de [1,100] -> 400 (size=101)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?size=101",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [{ "key": "size", "value": "101" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('400 size invalido (101)', function () { pm.response.to.have.status(400); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - sort con campo no admitido -> 400",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?sort=claveActivacion,asc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [{ "key": "sort", "value": "claveActivacion,asc" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('400 campo de orden no admitido', function () { pm.response.to.have.status(400); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - sort con direccion invalida -> 400",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?sort=estado,ascending",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [{ "key": "sort", "value": "estado,ascending" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('400 direccion invalida', function () { pm.response.to.have.status(400); });"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - sort=estado,desc respeta orden y desempata por orderNumber asc",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders?sort=estado,desc&size=50",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"],
+          "query": [
+            { "key": "sort", "value": "estado,desc" },
+            { "key": "size", "value": "50" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.test('estado no creciente, y dentro del mismo estado orderNumber creciente', function () {",
+              "  for (let i = 1; i < body.content.length; i++) {",
+              "    const prev = body.content[i - 1];",
+              "    const curr = body.content[i];",
+              "    pm.expect(curr.estado).to.be.at.most(prev.estado);",
+              "    if (curr.estado === prev.estado) {",
+              "      pm.expect(curr.orderNumber).to.be.above(prev.orderNumber);",
+              "    }",
+              "  }",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 - paginacion sin huecos ni duplicados (page=0 y page=1, size=5)",
+      "item": [
+        {
+          "name": "page=0 size=5",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders?page=0&size=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "5" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('paginaCeroIds', JSON.stringify(body.content.map(function (o) { return o.orderNumber; })));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "page=1 size=5 (sin solapamiento con page=0)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenOperador}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders?page=1&size=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "size", "value": "5" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "const idsPaginaCero = JSON.parse(pm.collectionVariables.get('paginaCeroIds') || '[]');",
+                  "const idsPaginaUno = body.content.map(function (o) { return o.orderNumber; });",
+                  "pm.test('ningun orderNumber se repite entre page=0 y page=1', function () {",
+                  "  idsPaginaUno.forEach(function (id) { pm.expect(idsPaginaCero).to.not.include(id); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "operadorUsername", "value": "", "type": "string", "description": "Definir por --env-var. No versionar valores reales." },
+    { "key": "operadorPassword", "value": "", "type": "string", "description": "NUNCA versionar un valor real aca." },
+    { "key": "sinRolUsername", "value": "", "type": "string" },
+    { "key": "sinRolPassword", "value": "", "type": "string" },
+    { "key": "tokenOperador", "value": "", "type": "string" },
+    { "key": "tokenSinRol", "value": "", "type": "string" },
+    { "key": "paginaCeroIds", "value": "", "type": "string" }
+  ]
+}
