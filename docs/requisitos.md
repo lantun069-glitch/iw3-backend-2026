@@ -1351,7 +1351,37 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F7.
 - Criterio de aceptación: un usuario autorizado acepta y el backend
   persiste usuario + fecha/hora; un usuario sin permiso no puede aceptar.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado** para el alcance probado (2026-10-23).
+  Implementación (solo frontend; `GET .../alarmas` y
+  `POST .../alarmas/{id}/aceptacion` reutilizados sin cambios de
+  contrato ni de permisos). Detalle completo en
+  `docs/contrato-f7-alarmas-ui.md` de `iw3-frontend`.
+  - **Evidencia manual del usuario, navegador real contra el backend
+    real (2026-10-23, varias rondas):** acceso desde Órdenes; orden
+    `900001` sin alarmas → mensaje de lista vacía; orden `500321003`
+    (de prueba, creada para esta unidad) con una alarma de 36 °C
+    aceptada sin observación → pasa a "Aceptadas" con usuario y fecha
+    reales, "Sin observación", quedando 0 pendientes; "Volver a
+    órdenes" desde Alarmas conserva el filtro.
+  - **Corrección de formato aplicada y confirmada:** las horas se
+    mostraban en 12 horas sin indicador am/pm (defecto de
+    presentación del locale `es-AR`, no un error de zona horaria —
+    verificado contrastando el valor crudo de la API contra la hora
+    real del servidor antes de corregir nada). Corregido a 24 horas
+    explícitas (`hourCycle: 'h23'`) en toda la UI, no solo en
+    alarmas; confirmado visualmente: disparo `14:18:48`, aceptación
+    `14:29:44`, ambos coinciden con la hora real.
+  - **Límites aceptados, documentados y no ocultos:** página y
+    ordenamiento al volver desde Alarmas **no se confirmaron** en
+    esta prueba (solo el filtro); doble envío y conservación de la
+    observación ante un error no se re-confirmaron visualmente en
+    esta ronda (sí se verificó 409/403 por API en una ronda anterior,
+    no en navegador). `AlarmaResponse.fechaDisparo`/`fechaAceptacion`
+    siguen sin offset explícito (a diferencia de
+    `OrdenResumenResponse`, ya corregido en TP32/TP33) — el frontend
+    le agrega el offset fijo `-03:00` de `ZONA_RECEPCION` antes de
+    interpretarla; **decisión conservada, no un cambio de backend**.
+    Sin framework de pruebas automatizadas de UI, igual que TP32-TP35.
 
 ### TP35 — Conciliaciones visibles solo en estado 4
 - Descripción: la UI muestra conciliaciones únicamente para órdenes en
