@@ -1384,3 +1384,47 @@ OpenAPI sin cambios (el envío no agrega endpoints), este archivo.
 **Próximo paso:** con TP14/TP19/TP27/TP28/TP29 verificados, evaluar
 con el usuario si F6 se considera cerrada para esta entrega, y la
 integración `feature/f6-alarmas` → `develop` cuando se autorice.
+
+## F6 — cierre (2026-10-22)
+
+**F6 queda cerrada para el alcance implementado.** Las únicas filas
+de la matriz asignadas a F6 (TP12 — ya verificada en F3 —, TP14,
+TP19, TP27, TP28, TP29) están verificadas, sin obligatorios
+pendientes, sin verificar ni bloqueados. No se repitió ninguna prueba
+para este cierre: se reutiliza íntegramente la evidencia ya registrada
+en cada contrato de unidad (`docs/contrato-f6-frecuencia-historico.md`,
+`docs/contrato-f6-promedios-historico.md`,
+`docs/contrato-f6-roles-permisos.md`,
+`docs/contrato-f6-alarmas-configuracion.md`,
+`docs/contrato-f6-correo-alarmas.md`).
+
+**Límites aceptados, conservados tal como quedaron documentados en
+cada unidad (no se resuelven ni se ocultan al cerrar):**
+- TP14: sin mecanismo de migración de despliegue verificado (solo
+  `ddl-auto=update` en el entorno local).
+- TP19: caso "sin ninguna muestra almacenada" no ejercitado como
+  prueba (inalcanzable por el circuito normal, protegido en código).
+- TP27: verificado para las 7 operaciones del dominio existentes al
+  momento de esta fase; no cubre endpoints que todavía no existen.
+- TP28/TP29: límite de umbral no probado puntualmente en 33.01 °C
+  (solo 33.00 exacto y valores bien por encima); indisponibilidad
+  total del servidor SMTP no probada (solo el rechazo de un
+  destinatario individual); sin reintento automático ni garantía de
+  entrega exactamente una vez.
+
+**Decisión de alcance (equipo, al cerrar F6):** el listado/filtrado
+de órdenes y las demás consultas que TP31 necesita (hoy no existe
+ningún endpoint que liste o filtre varias órdenes a la vez, solo
+operaciones puntuales por `orderNumber`) se implementan en **F7**,
+junto con el resto del consumo que la UI requiera — no se adelantan
+en F6. Esto no es un faltante de esta fase: la matriz ya asignaba
+TP31 a F7; se deja esta precisión registrada para que no quede
+ambigüedad. **No se marca ningún endpoint de consulta nuevo como
+cumplido** por esta decisión — ver `docs/requisitos.md`, TP31.
+
+**Fuera de alcance de este cierre, sin cambios:** TP26 (ensayo/
+defensa) y el despliegue en VM siguen pendientes de F5, sin relación
+con el cierre de F6. TP01/TP30/TP32-TP35 son F7/F8, no tocados.
+
+**F7 queda pendiente de iniciar.** No se implementó nada de F7 en
+este cierre.

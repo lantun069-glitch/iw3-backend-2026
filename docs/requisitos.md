@@ -1128,7 +1128,16 @@ y descarte de lecturas: `docs/fuentes.md`.
   real del backend; filtros/orden probados con datos de ejemplo.
 - DATO FALTANTE: confirmar la frase exacta con la consigna escrita o el
   docente antes de decidir si se muestran camión y/o preset.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: pendiente. Implementación: —. Evidencia: —. **DECISIÓN DEL
+  EQUIPO (cierre de F6, 2026-10-22):** el endpoint de listado/filtrado
+  de órdenes que este requisito necesita (hoy no existe: solo hay
+  endpoints de órdenes puntuales por `orderNumber`, ninguno que liste
+  o filtre varias) se implementa en **F7**, junto con el resto del
+  consumo que necesite la UI — no se adelanta en F6. Esto no es un
+  faltante de F6: la matriz ya asigna TP31 a F7; se registra la
+  precisión explícitamente para que no quede ambigüedad al cerrar F6.
+  No se marca ningún endpoint de consulta nuevo como cumplido por esta
+  nota.
 
 ### TP32 — ETA (tiempo estimado de llegada al preset)
 - Descripción: cálculo de ETA con preset, masa acumulada y caudal por

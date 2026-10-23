@@ -1159,3 +1159,17 @@ origen.
 - Esta entrada queda sin commit/push/merge, en la rama
   `feature/f6-alarmas` (continuación de `d40a87a`), por instrucción
   explícita de la sesión.
+
+## F6 — cierre (2026-10-22)
+
+Cierre formal de F6 para el alcance implementado, sin pruebas nuevas:
+se reutiliza la evidencia ya registrada en cada contrato de unidad
+(TP14, TP19, TP27, TP28/TP29). Detalle y límites aceptados en
+`docs/estado-proyecto.md`, sección "F6 — cierre".
+
+- Decisión de alcance: el listado/filtrado de órdenes y demás
+  consultas que TP31 necesita se implementan en F7, no se adelantan en
+  F6 — la matriz ya asignaba TP31 a F7; esta entrada solo deja la
+  precisión registrada, sin marcar ningún endpoint nuevo como cumplido.
+- Rama documental `docs/f6-cierre`, creada desde `develop` en
+  `24c7df3`, por instrucción explícita de la sesión.
