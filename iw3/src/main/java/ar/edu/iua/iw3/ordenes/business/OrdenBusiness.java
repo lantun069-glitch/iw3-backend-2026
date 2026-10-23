@@ -726,7 +726,7 @@ public class OrdenBusiness implements IOrdenBusiness {
 
 		String jpql = "SELECT NEW ar.edu.iua.iw3.ordenes.controllers.dto.OrdenResumenResponse("
 				+ "o.orderNumber, o.estado, c.patente, o.presetKg, o.masaAcumuladaKg, "
-				+ "o.temperaturaC, o.densidad, o.caudalKgH, o.fechaUltimaLectura) "
+				+ "o.temperaturaC, o.densidad, o.caudalKgH, o.fechaUltimaLectura, o.fechaInicioCarga) "
 				+ "FROM Orden o JOIN o.camion c "
 				+ "WHERE (:estado IS NULL OR o.estado = :estado) "
 				+ "ORDER BY " + orderBy;
@@ -737,9 +737,52 @@ public class OrdenBusiness implements IOrdenBusiness {
 		query.setMaxResults(tamanioValido);
 		List<OrdenResumenResponse> contenido = query.getResultList();
 
+		// TP32 (F7): no se puede expresar esta formula condicional dentro
+		// del "SELECT NEW" de arriba, se completa fila por fila despues de
+		// traer los datos. Solo en estado 2 (DECISION DEL EQUIPO, ver
+		// OrdenResumenResponse y docs/contrato-f7-tiempos-carga.md): en
+		// 1/3/4 queda null, no tiene sentido estimar un ETA de una carga
+		// que no esta en curso.
+		for (OrdenResumenResponse fila : contenido) {
+			if (fila.getEstado() != null && fila.getEstado() == 2) {
+				fila.setEtaMinutos(calcularEtaMinutos(fila.getPresetKg(), fila.getMasaAcumuladaKg(), fila.getUltimoCaudalKgH()));
+			}
+		}
+
 		long total = ordenDAO.contarPorEstado(estado);
 		int totalPaginas = (int) Math.ceil((double) total / tamanioValido);
 
 		return new OrdenListadoResponse(contenido, paginaValida, tamanioValido, total, totalPaginas);
+	}
+
+	/**
+	 * TP32 (F7): ETA en minutos para alcanzar el preset, segun el ultimo
+	 * snapshot de la orden (sin promediar ni usar historico - mismo
+	 * criterio de "ultimo valor valido" que el resto de la telemetria).
+	 * Formula y casos de borde: CLAUDE.md Sec.6 / docs/requisitos.md,
+	 * TP32 (fuente T2, cita literal registrada ahi).
+	 *
+	 * null = "no estimable": falta masa o caudal (orden sin lecturas
+	 * aun), o caudal <= 0. Un caudal <= 0 no deberia llegar persistido
+	 * (OrdenBusiness.registrarLectura ya lo descarta antes de guardar el
+	 * snapshot), por eso ese caso puntual no tiene prueba de integracion
+	 * end-to-end - se prueba aislado contra este metodo directamente
+	 * (ver OrdenBusinessEtaTest).
+	 *
+	 * masa >= preset: 0 minutos, sin cerrar la orden automaticamente (la
+	 * fuente no pide una transicion automatica por este motivo).
+	 *
+	 * Redondeo HALF_UP a 2 decimales en un unico paso final - DECISION
+	 * DEL EQUIPO, la fuente no fija precision ni modo de redondeo.
+	 */
+	static BigDecimal calcularEtaMinutos(BigDecimal presetKg, BigDecimal masaAcumuladaKg, BigDecimal caudalKgH) {
+		if (presetKg == null || masaAcumuladaKg == null || caudalKgH == null || caudalKgH.signum() <= 0) {
+			return null;
+		}
+		BigDecimal faltanteKg = presetKg.subtract(masaAcumuladaKg);
+		if (faltanteKg.signum() <= 0) {
+			return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+		}
+		return faltanteKg.multiply(BigDecimal.valueOf(60)).divide(caudalKgH, 2, RoundingMode.HALF_UP);
 	}
 }

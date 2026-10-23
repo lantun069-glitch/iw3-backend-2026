@@ -1173,3 +1173,74 @@ se reutiliza la evidencia ya registrada en cada contrato de unidad
   precisión registrada, sin marcar ningún endpoint nuevo como cumplido.
 - Rama documental `docs/f6-cierre`, creada desde `develop` en
   `24c7df3`, por instrucción explícita de la sesión.
+
+## F7 — TP32/TP33, tiempos de carga (2026-10-23)
+
+- **Aclaración de fuentes, por instrucción explícita de la sesión:**
+  `CLAUDE.md` (y, en general, cualquier documento local del equipo)
+  **no es evidencia docente** — es un borrador/síntesis del equipo,
+  aunque esté redactado en tono normativo. La fórmula de ETA y la
+  regla "visible solo en estado 2" que `CLAUDE.md` §6 presenta juntas
+  para ETA y tiempo transcurrido no deben leerse como una cita de T2
+  para ambos requisitos por igual - ver el chequeo de abajo.
+- **Verificación puntual contra NotebookLM (BE, notebook
+  `5f7b0e91-c874-416c-898b-a5a986471f3a`, 2026-10-23), pedida porque
+  la fórmula/visibilidad del ETA solo estaban respaldadas por
+  `CLAUDE.md`:** el fragmento literal de T2 (líneas 108-118 de la
+  transcripción) **no da una fórmula matemática para el ETA** (sin
+  resta, división ni "por 60" en el texto) y **la restricción "solo
+  en estado 2" se menciona en el texto únicamente para el tiempo
+  transcurrido (TP33), no para el ETA (TP32)**. Tampoco menciona
+  redondeo, decimales, ni el caso de caudal cero/negativo. Detalle
+  completo en `docs/requisitos.md`, TP32/TP33.
+- Consecuencia práctica: la fórmula de ETA, su redondeo (HALF_UP, 2
+  decimales) y que se calcule/muestre solo en estado 2 pasan a estar
+  etiquetados como **INTERPRETACIÓN DEL EQUIPO** / **DECISIÓN DEL
+  EQUIPO** en `docs/requisitos.md`, no como "confirmado por T2". La
+  restricción de estado 2 del tiempo transcurrido (TP33) sí sigue
+  siendo **CONFIRMADO** por cita literal.
+- **Fechas (TP32/TP33, F7):** `fechaInicioCarga` (ya existía en
+  `Orden.java`, F3) y `fechaUltimaLectura` se exponen en
+  `OrdenResumenResponse` como String ISO-8601 **con offset explícito**
+  (`DateTimeFormatter.ISO_OFFSET_DATE_TIME` sobre
+  `valor.atZone(ZONA_RECEPCION)`), nunca como `LocalDateTime` desnudo
+  - decisión explícita de la sesión para que el frontend no interprete
+    una hora sin zona como hora del navegador. No se modificó el tipo
+  de columna en `Orden.java` ni los valores ya almacenados: la
+  conversión es solo de presentación, en el DTO. `ZONA_RECEPCION` se
+  duplica como constante en `OrdenResumenResponse` (en vez de
+  depender de la capa de negocio desde un DTO) - debe coincidir con
+  `OrdenBusiness.ZONA_RECEPCION`, ambas documentadas con ese enlace
+  explícito.
+- **ETA en backend, sin endpoint nuevo:** `OrdenBusiness.calcularEtaMinutos`
+  (método estático, `ar.edu.iua.iw3.ordenes.business`, visibilidad de
+  paquete para poder probarlo directo desde un test sin Spring), se
+  invoca fila por fila en `listarOrdenes` solo para estado 2 y llena
+  `etaMinutos` en `OrdenResumenResponse`. No se pudo expresar en el
+  `SELECT NEW` JPQL existente (fórmula condicional con redondeo): se
+  completa después de traer los resultados, no agrega una consulta
+  por fila.
+- **Caudal ≤ 0, probado aislado:** `OrdenBusiness.registrarLectura` ya
+  descarta esas lecturas antes de persistir el snapshot (regla de F3),
+  por lo que ese caso de `calcularEtaMinutos` no es alcanzable por el
+  flujo normal end-to-end. Se prueba contra el método directamente en
+  `OrdenBusinessEtaTest` (JUnit puro, sin `@SpringBootTest`, sin BD),
+  con esa limitación documentada en el javadoc del test, no oculta.
+- **Frontend (reloj de TP33):** tick de 1 segundo vía `setInterval`
+  solo para forzar el re-render (`formatearTranscurrido` calcula
+  siempre contra `Date.now()`), con `clearInterval` en el cleanup del
+  `useEffect` al desmontar. El reloj nunca descuenta el ETA ni simula
+  avance de masa/caudal: esos valores solo cambian al volver a
+  consultar el backend ("Actualizar", igual que TP31).
+- **Sin framework de pruebas de UI en el frontend** (`package.json`
+  sin Vitest/Jest/Testing Library): no se incorporó uno para esta
+  unidad puntual, por instrucción de no agregar funcionalidades
+  nuevas fuera de alcance. Los casos de estados 1/3/4, contador mayor
+  a 24 h y manejo de offset quedan para la revisión visual conjunta
+  con el usuario, no para un test automatizado nuevo. Sí se hizo una
+  verificación puntual con Node 22.23.4 (fuera de la app) de que
+  `new Date(...)` interpreta correctamente los strings con offset que
+  produce el backend, con y sin fracción de segundo.
+- Esta entrada queda sin commit/push/merge, en la rama
+  `feature/f7-tiempos-carga` (continuación de `develop` en `491eccc`),
+  por instrucción explícita de la sesión.

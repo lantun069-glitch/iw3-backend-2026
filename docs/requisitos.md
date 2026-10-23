@@ -1153,6 +1153,16 @@ y descarte de lecturas: `docs/fuentes.md`.
     expone el endpoint y ambos DTOs nuevos sin pasos manuales. Frontend:
     `npm run build` (`tsc -b && vite build`) y `npm run lint` sin
     errores ni advertencias.
+  - **Verificación adicional (2026-10-23, para el inicio del
+    frontend, ver `docs/contrato-f7-diseno-ui.md`):** `sort=
+    fechaUltimaLectura,desc` contra el backend real (87 órdenes,
+    usuario `ROLE_OPERADOR`) devuelve las fechas reales en orden
+    estrictamente descendente, sin ninguna fila con
+    `fechaUltimaLectura` nulo intercalada — en MySQL, `ORDER BY ...
+    DESC` deja los `NULL` al final (confirmado también al revés:
+    `ASC` los deja primero). No hizo falta ningún ajuste de backend
+    para que el frontend pueda pedir "las N órdenes con lectura más
+    reciente" con `size=N&sort=fechaUltimaLectura,desc`.
   - **Prueba visual en navegador real, ejecutada por el usuario
     (2026-10-23):** tabla, filtro por estado, ordenamiento ascendente/
     descendente por columna, paginación, botón "Actualizar" sin perder
@@ -1185,30 +1195,139 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Descripción: cálculo de ETA con preset, masa acumulada y caudal por
   hora.
 - Alcance: final.
-- Fuente: T2 — "tienen que calcular el [ETA]... a eso lo van a calcular
-  con el preset... la masa acumulada... y el caudal por hora."
+- Fuente: T2 — cita literal reconfirmada por NotebookLM (BE,
+  2026-10-23) contra "Parte 2 - Criterios de aprobación del trabajo
+  integrador.txt", líneas 108-118: *"También tienen que calcular el
+  [ETA], que es el tiempo estimado de lle[gada]. A eso lo van a
+  calcular con el pre[set]... tengo la masa acumulada que es lo que
+  estoy recibiendo en tiempo real y tengo el caudal por hora. Con eso
+  yo puedo calcular cuándo me falta para que se llegue a ese
+  pre[set]."*
+- **CONFIRMADO (T2, cita de arriba):** el ETA se calcula con preset,
+  masa acumulada y caudal por hora.
+- **NO CONFIRMADO, verificado explícitamente por NotebookLM (no es un
+  supuesto sin chequear):** T2 **no da una fórmula matemática
+  explícita** (sin restas, divisiones, `max()` ni "por 60" en el
+  texto) **ni** dice que el ETA se muestre "solamente en estado 2"
+  (esa restricción de estado, en el texto, se menciona únicamente
+  para TP33/tiempo transcurrido, no para el ETA) **ni** menciona
+  redondeo, decimales, ni qué hacer con caudal cero o negativo.
+- **INTERPRETACIÓN DEL EQUIPO (no CLAUDE.md como fuente docente: ver
+  nota en docs/decisiones.md sobre que las instrucciones locales no
+  son evidencia de cátedra):** formalización de la cita de arriba en
+  `ETA_min = max(preset_kg - masa_kg, 0) / caudal_kg_h * 60`; caudal
+  nulo, faltante o ≤ 0 → null ("no estimable"); masa ≥ preset → 0 sin
+  cerrar la orden automáticamente; redondeo HALF_UP a 2 decimales en
+  un único paso final. **DECISIÓN DEL EQUIPO, por analogía con TP33 (no
+  una exigencia textual de T2 para el ETA puntualmente):** solo se
+  muestra/calcula para órdenes en estado 2 — null en 1/3/4.
 - Fase prevista: F7.
-- Criterio de aceptación: `ETA_min = max(preset_kg - masa_kg, 0) /
-  caudal_kg_h * 60` contra un ejemplo manual; caudal=0 → "no estimable";
-  masa≥preset → ETA=0 sin forzar cierre automático de la orden.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Criterio de aceptación: ejemplo manual (preset 10000/masa 4000/caudal
+  3000 → 120 min, caso numérico de control ya documentado en
+  CLAUDE.md §6, que tampoco es cita docente — ver la aclaración de
+  arriba); caudal ≤ 0 o sin datos → null; masa ≥ preset → 0.
+- Estado: **implementado sin verificar**. Implementación:
+  - Backend: `OrdenBusiness.calcularEtaMinutos(presetKg,
+    masaAcumuladaKg, caudalKgH)`, invocado en `listarOrdenes` solo
+    para filas en estado 2; expuesto como `etaMinutos` en
+    `OrdenResumenResponse` (`GET /api/v1/orders`, sin endpoint nuevo).
+  - Frontend: `formatearEta` en `OrdersListPage.tsx` — "—" fuera de
+    estado 2, "No estimable" si `etaMinutos` es null, minutos con 2
+    decimales en el resto; nunca recalcula ni descuenta el valor con
+    el reloj local (solo se actualiza al volver a consultar).
+  - Evidencia: `OrdenBusinessEtaTest` (JUnit, sin Spring ni BD — es
+    una función pura): 9/9 casos OK, incluye el ejemplo de 120 min,
+    un caso de redondeo no exacto (128.57), un caso que distingue
+    HALF_UP de HALF_EVEN (0.125→0.13), sin masa, sin caudal, caudal
+    cero, caudal negativo, preset alcanzado exacto y preset superado.
+    Caudal ≤ 0 se prueba aislado a propósito: `registrarLectura` ya
+    descarta esas lecturas antes de persistir, por lo que ese caso no
+    es alcanzable por el flujo normal end-to-end (ver javadoc del
+    test). `./mvnw compile` → `BUILD SUCCESS` con el resto de la
+    unidad (DTO, business, controller). Frontend: `npm run build` y
+    `npm run lint` sin errores ni advertencias.
+  - **Pendiente explícito:** revisión visual conjunta con el usuario
+    (estados 1/3/4 ocultando el ETA en pantalla, caso real con
+    backend corriendo). No se marca "verificado" hasta esa revisión.
 
 ### TP33 — Tiempo transcurrido, visible solo en estado 2
 - Descripción: tiempo transcurrido desde el inicio de la carga, visible
   únicamente mientras la orden está en estado 2.
 - Alcance: final.
-- Fuente: T2 — "el tiempo transcurrido desde que inicia la carga... eso
-  también lo tengo que estar mostrando siempre en algún lado... solamente
-  mientras una orden está en el estado 2."
+- Fuente: T2 — cita literal reconfirmada por NotebookLM (BE,
+  2026-10-23), mismo fragmento que TP32: *"El tiempo transcurrido
+  desde que inicio de la carga, eso también lo tengo que estar
+  mostrando siempre en algún lado en la interfaz gráfica, sólo
+  obviamente para orden en el estado 2. [...] solamente mientras una
+  orden está en el estado 2, puedo ir diciendo, mira esto, hace una
+  hora que está cargando por ejemplo."*
+- **CONFIRMADO (T2, cita de arriba, a diferencia de TP32):** el
+  tiempo transcurrido se muestra únicamente mientras la orden está en
+  estado 2 — esta restricción de estado sí es textual para este
+  requisito puntual.
 - Fase prevista: F7.
 - Criterio de aceptación: contador visible y corriendo solo en estado 2 y con inicio real
   de carga registrado; mientras no haya iniciado, mostrar “sin iniciar”
   como convención propuesta del equipo, sin contar desde la tara;
   no confundir "tara" con "inicio real de carga" (distinción general de
-  T1, aplicada aquí). DATO FALTANTE: T2 no dice explícitamente qué
-  mostrar antes del estado 2 (ej. "sin iniciar"); eso es una convención a
-  definir por el equipo, no un requisito confirmado.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+  T1, aplicada aquí). DATO FALTANTE (confirmado por NotebookLM, no
+  solo supuesto): T2 no dice explícitamente qué mostrar antes del
+  estado 2 (ej. "sin iniciar"), ni el formato del contador (HH:mm:ss,
+  minutos, etc.) ni qué pasa pasadas las 24 h; esas son convenciones a
+  definir por el equipo, no requisitos confirmados.
+- **DECISIÓN DEL EQUIPO:** formato HH:mm:ss con horas acumuladas sin
+  reiniciar a las 24 h; el contador se actualiza localmente cada
+  segundo contra `fechaInicioCarga` (sin solicitar nada al backend
+  por el tick) y nunca simula avance de masa/caudal/ETA, que solo
+  cambian al volver a consultar.
+- Estado: **implementado sin verificar**. Implementación:
+  - Backend: `fechaInicioCarga` (ya existía en `Orden.java` desde F3)
+    expuesto en `OrdenResumenResponse` como String ISO-8601 con
+    offset explícito de `ZONA_RECEPCION` (nunca un `LocalDateTime`
+    desnudo — ver TP32/TP33 en docs/contrato-f7-tiempos-carga.md);
+    `fechaUltimaLectura` recibe el mismo tratamiento de offset.
+  - Frontend: `formatearTranscurrido` en `OrdersListPage.tsx`, tick
+    de 1 segundo (`setInterval`, con `clearInterval` en el cleanup
+    del `useEffect` al desmontar) solo para forzar el re-render; el
+    cálculo real usa `Date.now()` en cada render, nunca un estado que
+    se incremente a mano.
+  - Evidencia: `./mvnw compile` → `BUILD SUCCESS`. Frontend: `npm run
+    build`/`npm run lint` sin errores. Verificación aislada (Node
+    22.23.4, fuera de la app) de que `new Date(...)` interpreta
+    correctamente un string con offset explícito de 6 dígitos de
+    fracción de segundo (formato real que produce
+    `DateTimeFormatter.ISO_OFFSET_DATE_TIME`), con y sin fracción.
+  - **Evidencia manual del usuario (2026-10-23, navegador real contra
+    el backend real):** el contador de tiempo transcurrido avanza un
+    segundo por segundo en pantalla (confirma que el tick de
+    `setInterval` + recálculo contra `Date.now()` funciona en
+    ejecución real, no solo en la lógica aislada); una captura mostró
+    el formato `HH:mm:ss` con horas acumuladas **superiores a 24**
+    sin reiniciar (ej. no vuelve a `00:xx:xx` al pasar las 24 h) —
+    reconfirmado en una entrada posterior de la misma sesión, sigue
+    vigente. Esto confirma puntualmente esos dos comportamientos de
+    TP33.
+  - **Evidencia manual del usuario, segunda ronda (2026-10-23):** el
+    valor de ETA permanece **fijo** mientras el contador de tiempo
+    transcurrido sigue avanzando segundo a segundo — confirma que el
+    tick de 1 segundo (`formatearTranscurrido`) nunca recalcula ni
+    descuenta `etaMinutos` (ese valor solo cambia al volver a
+    consultar el backend), tal como está documentado en
+    `docs/contrato-f7-tiempos-carga.md`. Ninguna de estas evidencias
+    equivale a verificar el resto de TP32/TP33 (ver pendientes abajo,
+    que se mantienen sin cambios).
+  - **Pendiente explícito (sin cambios por la evidencia de arriba):**
+    revisión visual conjunta con el usuario de: "Sin iniciar" sin
+    activación, contador y ETA ocultos en estados 1/3/4, "No
+    estimable" sin datos/caudal ≤ 0, preset alcanzado sin cerrar la
+    orden, e interpretación correcta del offset contra el backend
+    real (no solo la verificación aislada con Node). TP32/TP33 siguen
+    **implementados sin verificar** en conjunto. No hay framework de
+    pruebas automatizadas de UI instalado en este frontend
+    (`package.json` sin Vitest/Jest/Testing Library); no se incorporó
+    uno para esta unidad puntual (fuera de alcance, ver instrucción de
+    no agregar funcionalidades nuevas) — estos casos quedan para la
+    revisión visual, no para un test automatizado nuevo.
 
 ### TP34 — Visualización y aceptación de alarmas desde la UI
 - Descripción: gestión de alarmas de temperatura visible en la UI, con

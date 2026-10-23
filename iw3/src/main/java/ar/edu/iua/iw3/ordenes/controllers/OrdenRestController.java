@@ -163,11 +163,17 @@ public class OrdenRestController extends BaseRestController {
 					+ "campo de orden no es orderNumber, el resultado desempata por orderNumber ascendente para "
 					+ "que la paginacion sea estable entre llamadas. Los campos de telemetria "
 					+ "(masaAcumuladaKg/ultimaTemperaturaC/ultimaDensidad/ultimoCaudalKgH/fechaUltimaLectura) son "
-					+ "null si la orden todavia no tiene ninguna lectura aceptada. Requiere autenticacion JWT. "
+					+ "null si la orden todavia no tiene ninguna lectura aceptada. fechaUltimaLectura y "
+					+ "fechaInicioCarga (TP33) son String ISO-8601 CON offset explicito (ej. "
+					+ "\"2026-10-21T10:00:00.123456-03:00\"), nunca un LocalDateTime desnudo; fechaInicioCarga es "
+					+ "null hasta la primera lectura aceptada. etaMinutos (TP32) son los minutos restantes segun "
+					+ "el ultimo snapshot, solo para ordenes en estado 2 (null en el resto); null tambien si falta "
+					+ "masa/caudal o el caudal es <= 0 (\"no estimable\"); 0 si la masa ya alcanzo o supero el "
+					+ "preset, sin cerrar la orden automaticamente. Requiere autenticacion JWT. "
 					+ "Requiere el rol ROLE_OPERADOR o ROLE_SUPERVISOR.")
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "Pagina de ordenes.",
-					content = @Content(schema = @Schema(implementation = OrdenListadoResponse.class), examples = @ExampleObject(value = "{\"content\":[{\"orderNumber\":900001,\"estado\":2,\"patenteCamion\":\"AB123CD\",\"presetKg\":10000.500,\"masaAcumuladaKg\":4000.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000,\"fechaUltimaLectura\":\"2026-10-21T10:00:00.123456\"}],\"page\":0,\"size\":20,\"totalElements\":1,\"totalPages\":1}"))),
+					content = @Content(schema = @Schema(implementation = OrdenListadoResponse.class), examples = @ExampleObject(value = "{\"content\":[{\"orderNumber\":900001,\"estado\":2,\"patenteCamion\":\"AB123CD\",\"presetKg\":10000.500,\"masaAcumuladaKg\":4000.000,\"ultimaTemperaturaC\":18.50,\"ultimaDensidad\":0.5400,\"ultimoCaudalKgH\":3000.000,\"fechaUltimaLectura\":\"2026-10-21T10:00:00.123456-03:00\",\"fechaInicioCarga\":\"2026-10-21T09:40:12.654321-03:00\",\"etaMinutos\":120.00}],\"page\":0,\"size\":20,\"totalElements\":1,\"totalPages\":1}"))),
 			@ApiResponse(responseCode = "400", description = "estado fuera de [1,4], page negativo, size fuera de [1,100], o sort con un campo/direccion no admitido.",
 					content = @Content(schema = @Schema(implementation = StandartResponse.class), examples = @ExampleObject(value = "{\"message\":\"campo de orden no admitido: claveActivacion\",\"code\":400,\"devInfo\":\"No stack trace\"}"))),
 			@ApiResponse(responseCode = "401", description = "Sin token o token invalido/alterado.", content = @Content),
