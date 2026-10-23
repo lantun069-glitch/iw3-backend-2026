@@ -409,3 +409,40 @@ Detalle completo: `docs/decisiones.md`, sección "F4 — cierre".
      scoped por orden: no hace falta revelar que un id existe bajo otra
      orden para resolver el caso de uso; ambos devuelven el mismo
      mensaje genérico.)
+
+## F6 — quinta unidad: envío de correo de alarmas (TP28/TP29, cierra ambos)
+
+- **Qué hace:** cuando se dispara una alarma, publica un evento
+  inmutable que un listener asíncrono consume después del commit, y
+  envía un correo por cada destinatario configurado (sin bloquear la
+  respuesta de la lectura ni el bloqueo de la orden).
+- **Por qué:** T2 exige el envío real, no solo registrar la alarma;
+  "después del commit y fuera del bloqueo" es una decisión de diseño
+  para no mandar correos de una operación que termine revertida ni
+  demorar otras lecturas de la misma orden.
+- **Concepto de clase:** `@TransactionalEventListener(AFTER_COMMIT)`
+  vs. un `@EventListener` común — el primero solo se invoca si la
+  transacción que publicó el evento confirmó; si revierte, Spring
+  nunca llama al listener, sin necesidad de código adicional para
+  evitarlo.
+- **Cómo comprobarlo:** una prueba de integración que fuerza el
+  rollback de una lectura con temperatura alta (usando el motor de
+  transacciones real) confirma que ni la alarma queda en la base ni
+  llega ningún correo.
+- **Preguntas propuestas (sin practicar):**
+  1. ¿Por qué el evento no lleva la entidad `Alarma` directamente, si
+     ya existe en memoria en ese momento? (Para no depender de una
+     sesión de Hibernate que puede estar cerrada cuando el listener
+     asíncrono corra, y para que la notificación quede fija aunque la
+     configuración global cambie después — el evento es una copia,
+     no una referencia viva.)
+  2. ¿Qué pasa si el proceso se cae justo después de que la alarma se
+     confirmó en la base pero antes de que el correo salga? (Se
+     pierde esa notificación: está documentado explícitamente que no
+     hay reintento automático ni garantía de entrega exactamente una
+     vez — es una limitación aceptada, no un bug a esconder.)
+  3. ¿Cómo se probó la falla de un destinatario sin tocar el código
+     de producción? (Con un receptor SMTP local de prueba que rechaza
+     a propósito cualquier casilla con la palabra "fallo" — la falla
+     vive en la herramienta externa, no en un interruptor agregado a
+     la aplicación.)

@@ -9,6 +9,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -86,6 +87,8 @@ public class OrdenBusiness implements IOrdenBusiness {
 	private AlarmaRepository alarmaDAO;
 	@Autowired
 	private ConfiguracionAlarmaRepository configuracionAlarmaDAO;
+	@Autowired
+	private ApplicationEventPublisher eventPublisher;
 
 	@Override
 	@Transactional(rollbackFor = Exception.class)
@@ -349,7 +352,20 @@ public class OrdenBusiness implements IOrdenBusiness {
 				alarma.setTemperaturaC(temperaturaC);
 				alarma.setUmbralAplicado(config.getUmbralTemperaturaC());
 				alarma.setAceptada(false);
-				alarmaDAO.save(alarma);
+				alarma = alarmaDAO.save(alarma);
+
+				// TP28/TP29 (F6, segunda unidad): se publica un evento con
+				// datos inmutables (sin la entidad Alarma/Orden/
+				// ConfiguracionAlarma) - AlarmaEmailListener lo consume
+				// recien despues del commit de ESTA transaccion (@Async +
+				// @TransactionalEventListener AFTER_COMMIT), fuera del
+				// PESSIMISTIC_WRITE de arriba. Si la transaccion revierte
+				// por cualquier motivo posterior, Spring nunca invoca al
+				// listener: no hace falta ninguna comprobacion adicional
+				// para que una lectura revertida no envie correo.
+				eventPublisher.publishEvent(new AlarmaDisparadaEvent(alarma.getId(), orden.getOrderNumber(),
+						alarma.getTemperaturaC(), alarma.getUmbralAplicado(), alarma.getFechaDisparo(),
+						config.getDestinatariosList()));
 			}
 
 			return new LecturaResultado(orden, true, null);

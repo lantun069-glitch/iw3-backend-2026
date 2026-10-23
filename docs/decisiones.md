@@ -1105,3 +1105,57 @@ y su origen.
 - Esta entrada queda sin commit/push/merge, en la rama
   `feature/f6-alarmas` (creada desde `develop` en `1f71db5`), por
   instrucción explícita de la sesión.
+
+## F6 — alarmas de temperatura: envío de correo (TP28/TP29, segunda unidad, cierra ambos)
+
+Detalle completo, mecanismo y evidencia en
+`docs/contrato-f6-correo-alarmas.md`. Aquí solo las decisiones y su
+origen.
+
+- Evento inmutable sin entidades JPA (`AlarmaDisparadaEvent`): decisión
+  del equipo para no depender de una sesión de Hibernate abierta ni de
+  relaciones lazy cuando el listener asíncrono corra, y para que un
+  cambio posterior de configuración o una aceptación rápida no alteren
+  una notificación ya en camino (el evento lleva su propia copia de
+  los valores vigentes al momento del disparo).
+- `@TransactionalEventListener(AFTER_COMMIT)` + `@Async`: reutiliza
+  `@EnableAsync`, ya habilitado en la aplicación (`Scheduler.java`) —
+  no se agregó infraestructura nueva de async, solo el listener. Se
+  prefirió este mecanismo (y no el `ApplicationEventMulticaster` con
+  `SimpleAsyncTaskExecutor` ya configurado para los eventos de
+  usuario) porque ese multicaster no interviene en el re-despacho que
+  hace `TransactionSynchronizationManager` al llamar a un listener
+  transaccional en `afterCommit()` — por eso `@Async` en el método es
+  necesario para que el envío no bloquee el hilo que hizo el commit.
+- Sin reintento automático: decisión del equipo, documentada
+  explícitamente como limitación aceptada (no se promete entrega
+  exactamente una vez), no agregada por request del usuario de una
+  cola o mecanismo de reintento.
+- `SMTP_AUTH`/`SMTP_STARTTLS` configurables por variable de entorno,
+  con default sin cambios (`true`/`true`): permite apuntar a un
+  receptor local de prueba sin alterar el comportamiento por defecto
+  pensado para un proveedor real.
+- Receptor SMTP local de prueba: servidor mínimo propio (socket TCP,
+  sin dependencias nuevas), que simula el rechazo de **un**
+  destinatario agregando la palabra "fallo" a su casilla — la falla
+  vive en la herramienta de prueba externa, no en ningún interruptor
+  agregado al código de la aplicación. No simula una caída total del
+  servidor SMTP (esa indisponibilidad no se probó en esta unidad).
+  Se versiona en el repositorio (`tools/smtp_test_catcher.py` +
+  `tools/README.md`) para que la prueba de correo quede reproducible,
+  no solo documentada — decisión del equipo: es una utilidad de
+  pruebas, no código de producción, sin datos reales en ningún
+  momento; su archivo de salida queda excluido por `.gitignore`.
+- Prueba de rollback (`AlarmaRollbackIntegrationTest`): usa
+  `TransactionTemplate`/`PlatformTransactionManager` reales para forzar
+  la reversión desde el test, sin modificar `OrdenBusiness` ni agregar
+  ningún endpoint. Primer test de integración con contexto de Spring
+  de este proyecto (los anteriores, como `JwtSecurityVerificationTest`,
+  eran pruebas unitarias aisladas sin contexto) — se reutilizan las
+  dependencias de test ya declaradas en el POM, sin agregar ninguna
+  nueva.
+- Con esta unidad, TP28 y TP29 quedan **completos** para el alcance de
+  esta entrega.
+- Esta entrada queda sin commit/push/merge, en la rama
+  `feature/f6-alarmas` (continuación de `d40a87a`), por instrucción
+  explícita de la sesión.

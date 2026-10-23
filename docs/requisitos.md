@@ -1029,23 +1029,30 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F6.
 - Criterio de aceptación: con umbral=33, una lectura de 33 no dispara y
   una de 33,1 sí (umbral estrictamente superado, no igualado).
-- Estado: **en curso** — primera unidad (configuración y disparo)
-  implementada y verificada; **el envío de correo queda pendiente**
-  (unidad 2), por lo que TP28 no se declara completo. Implementación:
+- Estado: **verificado** (dos unidades: configuración/disparo, y
+  envío de correo). Implementación:
   `ConfiguracionAlarma`/`ConfiguracionAlarmaBusiness` (fila única en
   BD, `GET`/`PUT /api/v1/alarmas/configuracion`, solo
   `ROLE_SUPERVISOR`); `OrdenBusiness.registrarLectura` evalúa el
-  disparo sobre toda lectura aceptada. Sin fila de configuración, no
-  se evalúa ninguna alarma (sin umbral por defecto inventado).
-  Verificado con umbral=33.00: una lectura de 33.00 exacto no dispara
-  (igual al umbral, no "estrictamente superado"); lecturas por encima
-  (35.00 en adelante) sí — no se probó puntualmente el límite 33.01.
-  Detalle completo en
-  `docs/contrato-f6-alarmas-configuracion.md`. Evidencia:
-  `util/EmailBusiness.java` ya existe y es reutilizable para el envío
-  (unidad 2); el remitente está hardcodeado al dominio del profesor
-  (`noreply@magm.com.ar`), a decidir si se cambia (ver
-  `docs/estado-proyecto.md`).
+  disparo sobre toda lectura aceptada y publica `AlarmaDisparadaEvent`;
+  `AlarmaEmailListener` (`@TransactionalEventListener(AFTER_COMMIT)` +
+  `@Async`, reutilizando `@EnableAsync` ya habilitado) envía el correo
+  vía `EmailBusiness` existente, uno por destinatario. Sin fila de
+  configuración, no se evalúa ninguna alarma (sin umbral por defecto
+  inventado). Verificado con umbral=33.00: una lectura de 33.00 exacto
+  no dispara (igual al umbral, no "estrictamente superado"); lecturas
+  por encima (35.00 en adelante) sí — no se probó puntualmente el
+  límite 33.01. Correo verificado contra un receptor SMTP local de
+  prueba (sin proveedores ni destinatarios reales): mensaje recibido
+  con `orderNumber`/temperatura/umbral correctos; una falla en un
+  destinatario no impide el envío a los demás ni afecta la respuesta
+  HTTP de la lectura ni la persistencia de la alarma. Sin reintento
+  automático, documentado explícitamente (sin garantía de entrega
+  exactamente una vez). Detalle completo en
+  `docs/contrato-f6-alarmas-configuracion.md` y
+  `docs/contrato-f6-correo-alarmas.md`. El remitente sigue siendo uno
+  de prueba (no el histórico `noreply@magm.com.ar` del profesor);
+  confirmar remitente real antes de un envío en producción.
 
 ### TP29 — No repetir alarma pendiente; rehabilitar tras aceptación
 - Descripción: mientras una alarma esté pendiente de aceptación no se
@@ -1060,28 +1067,39 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Criterio de aceptación: una secuencia de lecturas altas sin aceptación
   genera un único correo; tras aceptar, una nueva lectura que vuelva a
   superar el umbral genera un nuevo correo.
-- Estado: **en curso** — la supresión mientras está pendiente, la
-  aceptación y el re-disparo tras aceptar están implementados y
-  verificados; **el envío de correo en sí queda pendiente** (unidad
-  2), por lo que "genera un único correo"/"genera un nuevo correo" del
-  criterio de aceptación todavía no se puede verificar literalmente
-  (se verificó el equivalente sin correo: "genera una única alarma" /
-  "genera una alarma nueva"). Alcance "por orden" de la supresión y
-  que el re-disparo no requiera que la temperatura haya bajado son
-  DECISIÓN DEL EQUIPO, no confirmados literalmente por la cita de T2.
-  Implementación: `Alarma` (fila por disparo, `aceptada` booleano,
-  auditoría usuario/fecha/observación); `GET`/`POST
-  .../orders/{orderNumber}/alarmas[...]`, `ROLE_OPERADOR` o
-  `ROLE_SUPERVISOR`. Usuario y fecha/hora de aceptación obligatorios,
-  observación el único campo opcional — apoyado en el fragmento
-  directo de T2 citado en `docs/contrato-f6-alarmas-configuracion.md`
-  (consultado vía NotebookLM), no una demostración inequívoca de la
-  transcripción. Evidencia: 404 en alarma inexistente y en alarma de
-  otra orden (sin distinguir los dos casos); 409 en aceptación
-  repetida; máximo una alarma pendiente por orden confirmado por SQL
-  (0 órdenes con más de una `aceptada=0` simultánea); aislamiento
-  entre órdenes confirmado. Detalle completo en
-  `docs/contrato-f6-alarmas-configuracion.md`.
+- Estado: **verificado** (dos unidades: supresión/aceptación/
+  re-disparo, y envío de correo). "Genera un único correo"/"genera un
+  nuevo correo" del criterio de aceptación ya se verificó
+  literalmente con un receptor local de prueba: una secuencia de
+  lecturas altas sin aceptar generó un único mensaje; tras aceptar,
+  una lectura nueva que volvió a superar el umbral generó un segundo
+  mensaje. Una lectura cuya transacción se revierte no deja alarma
+  persistida ni dispara ningún envío (verificado con una prueba de
+  integración que fuerza el rollback por el mecanismo real de
+  transacciones, sin agregar ningún interruptor al código). Alcance
+  "por orden" de la supresión y que el re-disparo no requiera que la
+  temperatura haya bajado son DECISIÓN DEL EQUIPO, no confirmados
+  literalmente por la cita de T2. Implementación: `Alarma` (fila por
+  disparo, `aceptada` booleano, auditoría usuario/fecha/observación);
+  `GET`/`POST .../orders/{orderNumber}/alarmas[...]`, `ROLE_OPERADOR`
+  o `ROLE_SUPERVISOR`; `AlarmaDisparadaEvent`/`AlarmaEmailListener`
+  para el envío (ver TP28). Usuario y fecha/hora de aceptación
+  obligatorios, observación el único campo opcional — apoyado en el
+  fragmento directo de T2 citado en
+  `docs/contrato-f6-alarmas-configuracion.md` (consultado vía
+  NotebookLM), no una demostración inequívoca de la transcripción.
+  Evidencia: 404 en alarma inexistente y en alarma de otra orden (sin
+  distinguir los dos casos); 409 en aceptación repetida; máximo una
+  alarma pendiente por orden confirmado por SQL (0 órdenes con más de
+  una `aceptada=0` simultánea); aislamiento entre órdenes confirmado;
+  los 5 casos de envío de correo (commit exitoso, supresión mientras
+  pendiente, re-disparo tras aceptar, rechazo de un destinatario
+  individual sin afectar la lectura ni al resto de destinatarios,
+  rollback sin alarma ni envío) verificados en
+  `docs/contrato-f6-correo-alarmas.md`. No se probó la indisponibilidad
+  total del servidor SMTP (solo el rechazo de un destinatario
+  puntual). Sin reintento automático ante falla de envío: documentado
+  explícitamente, no hay garantía de entrega exactamente una vez.
 
 ### TP30 — Login web y administración/monitoreo de órdenes
 - Descripción: autenticación de usuarios y administración/monitoreo de

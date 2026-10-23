@@ -1338,3 +1338,49 @@ requests) corrida una vez: 26/26 requests, 32/32 aserciones, 0 fallos.
 bloqueo de la orden, después del commit, con receptor local de
 pruebas), y luego evaluar la integración `feature/f6-alarmas` →
 `develop` cuando se autorice.
+
+## F6 — quinta unidad: envío de correo de alarmas (TP28/TP29, segunda unidad, cierra ambos)
+
+**Alcance:** notificación por correo de las alarmas ya implementadas
+(configuración/disparo/consulta/aceptación, unidad anterior). Con
+esta unidad, **TP28 y TP29 quedan completos** para el alcance de esta
+entrega. Rama `feature/f6-alarmas`, continuación de `d40a87a`.
+
+**Resumen:** `AlarmaDisparadaEvent` (inmutable, sin entidades JPA,
+snapshot de temperatura/umbral/destinatarios al momento del disparo)
+publicado desde `OrdenBusiness.registrarLectura`; `AlarmaEmailListener`
+(`@TransactionalEventListener(AFTER_COMMIT)` + `@Async`, reutilizando
+`@EnableAsync` ya habilitado) envía el correo vía `EmailBusiness`
+existente, uno por destinatario, capturando fallas por destinatario
+sin abortar el lote ni afectar la respuesta HTTP. Sin reintento
+automático (documentado explícitamente). `SMTP_AUTH`/`SMTP_STARTTLS`
+configurables por variable de entorno, default sin cambios. Detalle
+completo en `docs/contrato-f6-correo-alarmas.md`.
+
+**Verificación:** compilación limpia; los 5 casos acordados, los 5
+cubiertos: commit exitoso → mensaje recibido con datos correctos;
+lecturas altas con alarma pendiente → sin mensajes adicionales;
+aceptación + nuevo disparo → nueva notificación; **rechazo de un
+destinatario individual** (no indisponibilidad total del servidor
+SMTP, no probada) → lectura y alarma persisten (confirmado por SQL),
+sin afectar la respuesta HTTP ni el envío al otro destinatario;
+rollback forzado (prueba de integración `AlarmaRollbackIntegrationTest`,
+JUnit 5 + `@SpringBootTest` + `TransactionTemplate` real, sin agregar
+interruptores ni endpoints) → sin alarma persistida ni envío, con
+espera de hasta 5 s con sondeo antes de concluir la ausencia. Receptor
+SMTP local de prueba propio, versionado como utilidad de pruebas
+(`tools/smtp_test_catcher.py` + `tools/README.md`; sin dependencias
+nuevas, sin proveedores ni destinatarios reales).
+
+**Documentos actualizados:**
+`docs/contrato-f6-correo-alarmas.md` (nuevo), `tools/smtp_test_catcher.py`
++ `tools/README.md` (nuevos, utilidad de pruebas versionada),
+`docs/requisitos.md` (TP28/TP29 → verificados), `docs/decisiones.md`,
+OpenAPI sin cambios (el envío no agrega endpoints), este archivo.
+
+**Sin commit/push/merge** en esta unidad, por instrucción explícita.
+`main`, `develop` y el tag `parcial-2-local-v1` no se tocaron.
+
+**Próximo paso:** con TP14/TP19/TP27/TP28/TP29 verificados, evaluar
+con el usuario si F6 se considera cerrada para esta entrega, y la
+integración `feature/f6-alarmas` → `develop` cuando se autorice.

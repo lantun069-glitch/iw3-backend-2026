@@ -1,11 +1,15 @@
 package ar.edu.iua.iw3.ordenes.model;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -45,4 +49,16 @@ public class ConfiguracionAlarma {
 	 */
 	@Column(nullable = false, length = 500)
 	private String destinatarios;
+
+	/**
+	 * Parseo del campo destinatarios (coma-separado, formato ya validado
+	 * en ConfiguracionAlarmaRequest). Usado para construir el snapshot
+	 * inmutable de AlarmaDisparadaEvent en el momento del disparo - ver
+	 * OrdenBusiness.registrarLectura.
+	 */
+	@Transient
+	public List<String> getDestinatariosList() {
+		return Arrays.stream(destinatarios.split(",")).map(String::trim).filter(s -> !s.isEmpty())
+				.collect(Collectors.toList());
+	}
 }

@@ -16,3 +16,6 @@ graphify-out/
 # Entornos locales de Postman con credenciales reales (real secrets live here, never commit them)
 postman/*.postman_environment.json
 !postman/*.postman_environment.example.json
+
+# Salida generada al correr el receptor SMTP de pruebas (TP28/TP29, F6)
+tools/smtp-received.log
