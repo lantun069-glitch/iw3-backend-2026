@@ -1460,3 +1460,43 @@ como cubiertos.
 autorizados en `feature/f7-monitoreo-ordenes` (ambos repos), e
 integración `--ff-only` a `develop` también autorizada tras el push.
 `main` y el tag `parcial-2-local-v1` no se tocan.
+
+## F7 — contraste contra el criterio de salida (2026-10-23, todavía no cerrada)
+
+Con TP30-TP35 (la matriz de órdenes/UI asignada a F7) ya
+**verificados para su alcance probado** en checkpoints anteriores
+(ver `docs/requisitos.md`), se contrasta el estado real contra la
+salida de F7 registrada en `CLAUDE.md` §8: *"circuito conectado al
+backend real; pruebas funcionales pertinentes... Resolver y
+documentar antes de esta salida los pendientes FE de la sección 13,
+incorporando los entregables que correspondan. No confundir mocks
+con integración validada."*
+
+- **Requisitos numerados (TP30-TP35):** cero pendientes, sin
+  verificar o bloqueados — todos en estado "verificado" para el
+  alcance probado, con límites aceptados documentados explícitamente
+  (no ocultos), no funcionalidad faltante.
+- **Mocks vs. integración real:** el caso "Inicio vacío" se verificó
+  visualmente con un **mock HTTP temporal y aislado** (ver
+  `docs/contrato-f7-diseno-ui.md` de `iw3-frontend`), nunca con la
+  base real vacía (inalcanzable: hay 90 órdenes de prueba) ni con el
+  backend real. Se registra explícitamente como simulación, no como
+  integración validada — no se cuenta como evidencia de backend real
+  para ningún TP.
+- **Límite no bloqueante, no ejercitado:** no se comprobó si Inicio
+  conserva un resumen previo ya cargado cuando una actualización
+  *posterior* falla (distinto del ciclo error→recuperación, que sí
+  se confirmó). No bloquea el cierre, pero tampoco se marca como
+  probado.
+- **Bloqueo real encontrado, sin resolver en esta entrada:** la
+  tabla "FE: prácticas y criterios por confirmar" (`docs/requisitos.md`,
+  carpetas 01-13 del cuaderno FE) sigue con **"Pendiente"/"DATO
+  FALTANTE" en casi todas las filas** — ninguna carpeta se leyó
+  completa todavía. `CLAUDE.md` §8 exige resolver y documentar estos
+  pendientes **antes** de la salida de F7, incorporando los
+  entregables que correspondan. Esto **no se resuelve en esta
+  entrada** (no se leyó ningún documento del cuaderno FE, por
+  instrucción explícita de no implementar ni ampliar el alcance al
+  informar un hallazgo) - se deja registrado como el motivo concreto
+  por el que **F7 no se cierra todavía**, aunque TP30-TP35 ya estén
+  verificados.

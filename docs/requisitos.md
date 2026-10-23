@@ -1110,7 +1110,27 @@ y descarte de lecturas: `docs/fuentes.md`.
 - Fase prevista: F7.
 - Criterio de aceptación: login real contra el backend, logout, sesión
   mientras dure el token, operaciones visibles según el rol.
-- Estado: pendiente. Implementación: —. Evidencia: —.
+- Estado: **verificado** para login/logout/sesión (corrección de
+  estado: esta fila quedó en "pendiente" por un desfasaje de
+  documentación — la unidad ya estaba implementada y probada desde
+  una sesión anterior; no se repite esa batería, se reutiliza la
+  evidencia ya registrada). Implementación: `iw3-frontend`
+  (`LoginPage.tsx`, `AuthContext.tsx`, `httpClient.ts`,
+  `ProtectedRoute.tsx`), detalle completo en
+  `docs/contrato-f7-login.md` de ese repo.
+  - **Evidencia manual del usuario, navegador real contra el backend
+    real:** login correcto con `ROLE_OPERADOR` → redirige; credenciales
+    incorrectas → error visible sin redirigir; ruta protegida sin
+    sesión → redirige a `/login`; logout → vuelve a `/login`; recargar
+    con sesión activa → la pierde y vuelve a pedir login. 6/6 puntos
+    del checklist, correctos.
+  - **Límite aceptado, no ejercitado con evidencia propia:** "operaciones
+    visibles según el rol" — hoy `ROLE_OPERADOR` y `ROLE_SUPERVISOR`
+    tienen exactamente las mismas pantallas disponibles (no hay
+    todavía ninguna vista con visibilidad condicionada por rol en el
+    frontend); la autorización real la sigue aplicando el backend en
+    cada operación. No se marca como probado por falta de un caso que
+    lo ejercite.
 
 ### TP31 — Datos mostrados por orden en el monitoreo, con filtros
 - Descripción: número de orden, estado, [frase con ruido de ASR, ver
