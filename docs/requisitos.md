@@ -1128,9 +1128,8 @@ y descarte de lecturas: `docs/fuentes.md`.
   real del backend; filtros/orden probados con datos de ejemplo.
 - DATO FALTANTE: confirmar la frase exacta con la consigna escrita o el
   docente antes de decidir si se muestran camión y/o preset.
-- Estado: **en curso** (2026-10-23, rama `feature/f7-monitoreo-ordenes`
-  en ambos repos, sin commit todavía al cerrar esta entrada — ver
-  checkpoint). Implementación:
+- Estado: **verificado** para el alcance probado (2026-10-23, rama
+  `feature/f7-monitoreo-ordenes` en ambos repos). Implementación:
   - Backend: `GET /api/v1/orders` (estado opcional 1-4, `page`/`size`
     paginados, `sort` limitado a una lista explícita de campos con
     desempate estable por `orderNumber`), `OrdenBusiness.listarOrdenes`,
@@ -1154,11 +1153,24 @@ y descarte de lecturas: `docs/fuentes.md`.
     expone el endpoint y ambos DTOs nuevos sin pasos manuales. Frontend:
     `npm run build` (`tsc -b && vite build`) y `npm run lint` sin
     errores ni advertencias.
-  - **Pendiente explícito: prueba visual en navegador real** (tabla,
-    filtro, ordenamiento, paginación, botón "Actualizar" y "Sin datos")
-    — no ejecutada todavía, por decisión explícita de pausar la sesión
-    antes de hacerla. No se marca TP31 como verificado ni completo
-    hasta hacerla.
+  - **Prueba visual en navegador real, ejecutada por el usuario
+    (2026-10-23):** tabla, filtro por estado, ordenamiento ascendente/
+    descendente por columna, paginación, botón "Actualizar" sin perder
+    la sesión, cambio de filtro de estado desde la página 2 que vuelve
+    a la página 0/1, y "Sin datos" en las columnas de telemetría sin
+    lectura — los 7 puntos del checklist, correctos. Esta es la prueba
+    que las verificaciones anteriores (Postman en backend, build/lint
+    en frontend) no podían cubrir por sí solas.
+  - **Corrección aplicada tras la prueba manual:** la etiqueta del
+    filtro de estado 2 decía "2 - En carga"; se corrige a "2 - Tara
+    registrada" porque el estado 2 también incluye órdenes que ya
+    registraron tara y esperan la activación (todavía no están
+    cargando efectivamente). Cambio solo de texto en
+    `OrdersListPage.tsx` (frontend), sin tocar contrato ni backend.
+  - **No probado, no se marca como tal:** casos de error de red/
+    servidor en esta pantalla, lista vacía (cero órdenes) y otros
+    casos no incluidos en el checklist anterior. Quedan pendientes de
+    evidencia específica antes de darlos por cubiertos.
   - **DECISIÓN DEL EQUIPO (cierre de F6, 2026-10-22):** el endpoint de
     listado/filtrado de órdenes que este requisito necesita (antes no
     existía: solo había endpoints de órdenes puntuales por

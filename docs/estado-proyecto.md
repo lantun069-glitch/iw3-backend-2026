@@ -1428,3 +1428,35 @@ con el cierre de F6. TP01/TP30/TP32-TP35 son F7/F8, no tocados.
 
 **F7 queda pendiente de iniciar.** No se implementó nada de F7 en
 este cierre.
+
+## F7 — primera unidad de monitoreo verificada (2026-10-23)
+
+**TP31 queda verificado para el alcance probado** (listado paginado/
+filtrable/ordenable de órdenes, backend + frontend): endpoint
+`GET /api/v1/orders` ya verificado con Postman (ver checkpoint
+2026-10-23-01) más la prueba visual en navegador real que faltaba,
+ejecutada por el usuario sobre ambos servicios reales — tabla, filtro
+por estado, orden ascendente/descendente, paginación, "Actualizar"
+sin perder sesión, cambio de filtro desde página 2 vuelve a página
+0/1 y "Sin datos" en telemetría ausente: correcto. No se repitió la
+batería de Postman ni el build/lint del frontend, ya verificados en
+la entrada anterior — ver `docs/requisitos.md`, TP31.
+
+Corrección de texto en el frontend tras la prueba manual: la opción
+"2 - En carga" del filtro de estado pasa a "2 - Tara registrada" (el
+estado 2 también cubre órdenes que esperan activación, no solo las
+que ya están cargando). Cambio de una línea en `OrdersListPage.tsx`,
+sin impacto en contrato ni backend.
+
+**F7 sigue abierta:** TP31 es la fila verificada en esta unidad; TP32
+(ETA), TP33 (tiempo transcurrido), TP34 (alarmas desde UI) y TP35
+(conciliación visible solo en estado 4) siguen pendientes. El estado
+de TP30 (login) no se audita en esta entrada — no era el alcance de
+esta unidad. No se probaron en esta unidad los casos de error de
+red/servidor ni lista vacía de la pantalla de órdenes: no se marcan
+como cubiertos.
+
+**Respaldo:** commit y push de esta corrección y su documentación
+autorizados en `feature/f7-monitoreo-ordenes` (ambos repos), e
+integración `--ff-only` a `develop` también autorizada tras el push.
+`main` y el tag `parcial-2-local-v1` no se tocan.
