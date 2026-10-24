@@ -1244,3 +1244,83 @@ se reutiliza la evidencia ya registrada en cada contrato de unidad
 - Esta entrada queda sin commit/push/merge, en la rama
   `feature/f7-tiempos-carga` (continuación de `develop` en `491eccc`),
   por instrucción explícita de la sesión.
+
+## Pendientes FE de la sección 13: resueltos por consulta puntual (2026-10-23)
+
+- Consulta dirigida a NotebookLM (cuaderno "Ingeniería Web III FE",
+  `0601d0ab-5564-42ab-821b-1356d44c3b67`, 28 fuentes), no una
+  relectura completa: dos preguntas puntuales sobre (a) si las
+  carpetas 01-13 son entregables separados o patrón de referencia, y
+  (b) si sus exigencias técnicas (Zod, librerías de UI, Cypress/CI/
+  hosting, informe de performance) aplican al trabajo integrador de
+  gas.
+- **Resultado, con cita literal:** las carpetas 01-13 describen el
+  **proyecto personal autónomo de esta misma materia** (repositorio
+  propio "ingenieria-web-3"), **sin ninguna mención de integración
+  con otro trabajo integrador** (confirmado explícitamente, no
+  inferido). Sus exigencias puntuales son del proyecto personal, no
+  del integrador de gas — se documentan como "no aplica, con
+  justificación" en vez de como "pendiente".
+- **Por qué no se leyeron las 28 fuentes completas:** la instrucción
+  de la sesión pidió reutilizar citas existentes y consultas
+  puntuales, no releer todo innecesariamente; dos preguntas bien
+  dirigidas alcanzaron para resolver la ambigüedad central (a qué
+  proyecto corresponden las exigencias), sin necesidad de transcribir
+  carpeta por carpeta.
+- **Dato que sigue faltante, sin bloquear nada del integrador:** si
+  el proyecto personal de la materia tiene nota propia independiente
+  - las fuentes no lo aclaran ("no está en el material"); es una
+  pregunta para el docente sobre OTRA pieza de evaluación, no sobre
+  este trabajo.
+- Con esta resolución, el criterio de salida de F7 (`CLAUDE.md` §8)
+  queda satisfecho - ver `docs/estado-proyecto.md`, sección "F7 —
+  contraste contra el criterio de salida".
+- Esta entrada queda sin commit/push/merge, por instrucción explícita
+  de la sesión (solo documentación).
+
+## Criterio del equipo aclarado: estructura de la base docente (2026-10-23)
+
+**Decisión del equipo, aclarada explícitamente por el usuario:** el
+integrador debe **mantener** la estructura y los patrones de la base
+docente oficial (`iw3-backend`, commit `b7e705d` "Backend completo")
+**ampliándolos** para cumplir la consigna - no corresponde
+reorganizarla, ni trasladar automáticamente herramientas exigidas en
+el proyecto personal de las clases FE (ver sección anterior: eso es
+un proyecto distinto, con su propio alcance y fuente).
+
+**Contraste puntual, sin auditoría completa ni pruebas repetidas**
+(comparación de listado de archivos entre `iw3-backend` e
+`iw3-backend-sanitized`, más una inspección dirigida):
+
+- **Paquetes/capas:** los 15 paquetes de la base (`auth`, `business`,
+  `config`, `controllers`, `events`, `integration/cli1`,
+  `integration/cli2`, `model`, `model/persistence`, `schedules`,
+  `security`, `util`, `websocket`, y sus subpaquetes) están
+  **intactos, sin un solo archivo removido ni renombrado** -
+  verificado por diff de listados de archivos (`comm` sobre ambos
+  árboles), no por lectura manual. La única adición es un paquete
+  **nuevo** `ordenes` (con `business`/`controllers.dto`/
+  `model.persistence`), que replica la misma convención de capas de
+  la base en vez de inventar una propia.
+- **Controllers:** `OrdenRestController extends BaseRestController`
+  - reutiliza el controller base, no lo duplica.
+- **Respuesta estándar:** `OrdenRestController` usa
+  `IStandartResponseBusiness`/`StandartResponse` de `util/`, igual
+  que los controllers de la base - sin una respuesta estándar
+  paralela.
+- **Autenticación/seguridad:** sin ningún archivo de JWT/seguridad/
+  filtros dentro de `ordenes/` - la autorización de los endpoints de
+  órdenes se apoya enteramente en `auth/`/`security/` ya existentes
+  (`@PreAuthorize` sobre los mismos roles, sin un mecanismo nuevo).
+- **Correo:** el envío de alarmas (TP28/TP29) reutiliza
+  `util.EmailBusiness` ya existente en la base - no hay un
+  `JavaMailSender`/`MimeMessage` nuevo dentro de `ordenes/`.
+
+**Sin desviación concreta encontrada.** No se mezcla este criterio
+con las exigencias funcionales del integrador (TP01-TP36): mantener
+la estructura de la base es una condición necesaria ya cumplida, no
+un sustituto de los requisitos funcionales, que se siguen rastreando
+aparte en la matriz de `docs/requisitos.md`.
+
+Esta entrada queda sin commit/push/merge, por instrucción explícita
+de la sesión (solo documentación, sin auditoría completa).

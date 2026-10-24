@@ -1461,7 +1461,7 @@ autorizados en `feature/f7-monitoreo-ordenes` (ambos repos), e
 integración `--ff-only` a `develop` también autorizada tras el push.
 `main` y el tag `parcial-2-local-v1` no se tocan.
 
-## F7 — contraste contra el criterio de salida (2026-10-23, todavía no cerrada)
+## F7 — contraste contra el criterio de salida (2026-10-23, actualizado)
 
 Con TP30-TP35 (la matriz de órdenes/UI asignada a F7) ya
 **verificados para su alcance probado** en checkpoints anteriores
@@ -1488,15 +1488,91 @@ con integración validada."*
   *posterior* falla (distinto del ciclo error→recuperación, que sí
   se confirmó). No bloquea el cierre, pero tampoco se marca como
   probado.
-- **Bloqueo real encontrado, sin resolver en esta entrada:** la
-  tabla "FE: prácticas y criterios por confirmar" (`docs/requisitos.md`,
-  carpetas 01-13 del cuaderno FE) sigue con **"Pendiente"/"DATO
-  FALTANTE" en casi todas las filas** — ninguna carpeta se leyó
-  completa todavía. `CLAUDE.md` §8 exige resolver y documentar estos
-  pendientes **antes** de la salida de F7, incorporando los
-  entregables que correspondan. Esto **no se resuelve en esta
-  entrada** (no se leyó ningún documento del cuaderno FE, por
-  instrucción explícita de no implementar ni ampliar el alcance al
-  informar un hallazgo) - se deja registrado como el motivo concreto
-  por el que **F7 no se cierra todavía**, aunque TP30-TP35 ya estén
-  verificados.
+- **Bloqueo anterior, resuelto en esta entrada (2026-10-23, consulta
+  puntual a NotebookLM FE):** la tabla "FE: prácticas y criterios por
+  confirmar" (`docs/requisitos.md`) quedó resuelta por cita literal,
+  no por lectura completa de las 28 fuentes. Hallazgo: las carpetas
+  01-13 describen el **"proyecto personal" propio y autónomo de esta
+  materia** (repositorio propio "ingenieria-web-3"), confirmado
+  explícitamente que **no hay ninguna mención de integración con
+  otro trabajo integrador**. Sus exigencias puntuales (Zod/React
+  Hook Form, librería de UI, informe de performance, Cypress/CI/
+  hosting) son exigencias docentes confirmadas por cita, pero **del
+  proyecto personal de la materia, no del trabajo integrador de
+  gas** — no aplican a este proyecto, con justificación y fuente, no
+  por supuesto. Único dato realmente faltante (confirmado por
+  NotebookLM: *"no está en el material"*): si ese proyecto personal
+  tiene nota propia independiente — no bloquea el integrador, es una
+  pieza de evaluación distinta que el usuario puede resolver con el
+  docente si lo necesita.
+- **Con esto, el criterio de salida de F7 registrado en `CLAUDE.md`
+  §8 queda satisfecho:** circuito conectado al backend real (TP30-
+  TP35 verificados), pendientes FE de la sección 13 resueltos y
+  documentados (ninguno corresponde incorporar al integrador), y
+  ningún mock confundido con integración validada (explícito en
+  TP31/TP35 y en el caso "Inicio vacío").
+- **Contraste adicional (2026-10-23): estructura contra la base
+  docente oficial** (`docs/decisiones.md`, sección "Criterio del
+  equipo aclarado: estructura de la base docente") - el integrador
+  mantiene intactos los paquetes/capas de `iw3-backend` (sin un solo
+  archivo removido ni renombrado) y reutiliza controller base,
+  respuesta estándar, autenticación/seguridad y correo existentes; la
+  única adición es el paquete `ordenes`, con la misma convención de
+  capas. **Sin desviación concreta encontrada.**
+- **F7 puede cerrarse** en cuanto se autorice la ceremonia de cierre
+  (commit/checkpoint final y, si corresponde, promoción a
+  `develop`/`main` y etiqueta) — no ejecutada en esta entrada.
+
+## F7 — CIERRE (2026-10-23, autorizado por el usuario)
+
+**F7 queda cerrada para el alcance implementado**, con la evidencia
+ya registrada en los checkpoints y contratos de esta misma sesión
+(no se repitió ninguna prueba ni revisión para este cierre — mismo
+criterio que el cierre de F6).
+
+**Requisitos del integrador cubiertos por F7 (TP30-TP35):** todos
+**verificados** para su alcance probado. Login/logout/sesión (TP30),
+listado filtrable/ordenable de órdenes (TP31), ETA (TP32), tiempo
+transcurrido (TP33), alarmas desde la UI (TP34) y conciliación visible
+solo en estado 4 (TP35) - implementados en `iw3-frontend`, reutilizando
+endpoints y permisos del backend sin cambios de contrato.
+
+**Límites aceptados, conservados tal como quedaron documentados (no
+se resuelven ni se ocultan al cerrar):**
+- TP30: "operaciones visibles según el rol" no tiene evidencia propia
+  - ninguna pantalla distingue hoy por rol.
+- TP32/TP33: caudal ≤ 0 no probado visualmente (inalcanzable por el
+  flujo normal, cubierto por un test unitario aislado); sin framework
+  de pruebas automatizadas de UI.
+- TP34: doble envío y conservación de observación ante error no
+  reconfirmados visualmente en la ronda final; `AlarmaResponse` sigue
+  sin offset explícito en el backend (workaround de frontend
+  conservado, no un cambio de backend pendiente).
+- TP35: 404 de conciliación solo verificado por API, no en navegador;
+  promedios `null` sin detalle almacenado, no ejercitado (inalcanzable
+  por el circuito normal).
+- Diseño general: si Inicio conserva un resumen previo durante una
+  actualización *posterior* fallida, no se comprobó. El caso "Inicio
+  vacío" se verificó con un **mock temporal, no contra el backend
+  real ni la base real** - no cuenta como integración validada.
+
+**Distinción conservada, no mezclada:** los requisitos funcionales
+del integrador (T1/T2, matriz TP01-TP36) son una cosa; las prácticas
+del "proyecto personal" de las clases FE (carpetas 01-13 del cuaderno,
+con su **propio repositorio y alcance**, confirmado por NotebookLM
+sin mención de integración con este trabajo) son otra - sus
+exigencias puntuales (Zod/React Hook Form, librería de UI, informe de
+performance, Cypress/CI/hosting) no se convirtieron en obligaciones
+de este integrador. Mantener la estructura de la base docente oficial
+(`iw3-backend`) ampliándola, sin reorganizarla, es una condición
+aparte, ya verificada sin desviaciones (ver `docs/decisiones.md`).
+
+**Fuera de alcance de este cierre, explícitamente NO cumplido ni
+declarado como tal:** el despliegue en la VM asignada (F8), el
+ensayo/defensa con preguntas practicadas por una persona real
+(TP26/TP36) y la prueba de envío de alarma a una casilla de correo
+real (distinta del receptor SMTP local de prueba) siguen
+**pendientes**. No se tocan en este cierre ni se dan por hechos.
+
+**F8 queda pendiente de iniciar.** No se implementó nada de F8 en
+este cierre.

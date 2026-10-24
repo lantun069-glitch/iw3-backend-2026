@@ -1569,31 +1569,70 @@ cada una con un documento y una presentación, más dos notas sueltas).
   obliga a usar React/Vue/Axios específicamente para el integrador; es
   contexto de cómo se enseña el patrón, no una obligación de la consigna.
 
-### Carpetas 01-13 (sin leer el contenido completo todavía)
+### Carpetas 01-13 — resuelto por consulta puntual a NotebookLM (2026-10-23)
 
-| Carpeta | Obligación de la práctica | Aplicable al integrador | Estado |
-| --- | --- | --- | --- |
-| 01 Presentación / 02 Flujo profesional | DATO FALTANTE (no se leyó el documento completo) | Proceso con IA supervisada ya en uso en este proyecto | Pendiente de leer antes de confirmar entregables de proceso |
-| 03 Componentes | DATO FALTANTE | No directamente; referencia de patrón de componentes para F7 | Pendiente |
-| 04 Estado y formularios | DATO FALTANTE | Login/logout aplica (TP30) | Pendiente |
-| 05 Renderizado dinámico | DATO FALTANTE | Filtros/orden de órdenes (TP31) aplica | Pendiente |
-| 06 Ciclo de vida y APIs | DATO FALTANTE | Consumo del backend real en F7; ver criterios ya leídos en "Todas las notas" arriba | Pendiente |
-| 07 Routing y estado global | DATO FALTANTE | Rutas protegidas por rol aplica | Pendiente |
-| 08 CRUD profesional | DATO FALTANTE | Parcial: solo operaciones realmente permitidas por el dominio, no CRUD libre | Pendiente |
-| 09 Formularios profesionales | DATO FALTANTE | Confirmar si alguna librería es exigida por evaluación FE o es libre | Pendiente |
-| 10 Arquitectura Frontend | DATO FALTANTE | Estructura de carpetas aplica | Pendiente |
-| 11 UI profesional | DATO FALTANTE | UI del integrador aplica; librería a confirmar según stack elegido | Pendiente |
-| 12 Performance | DATO FALTANTE | Si se exige informe de performance, aplicarlo sobre el integrador | Pendiente |
-| 13 Testing y Deploy | DATO FALTANTE | Plan de pruebas aplica; hosting en potencial conflicto con la VM asignada | Pendiente, bloquea decisión de F8 |
-| 14 Seguridad de frontend | DATO FALTANTE (carpeta reportada vacía, sin fuente en el cuaderno) | — | No hay contenido que leer |
+**Hallazgo central, confirmado por cita literal (NotebookLM, cuaderno
+FE, fuente `01 - Documento Presentación de la materia.docx` y
+siguientes):** las carpetas 01-13 describen un **"proyecto
+personal"/"proyecto integrador" propio y autónomo de esta misma
+materia (Ingeniería Web III)** — una aplicación web genérica que cada
+alumno/grupo construye clase a clase como vehículo de aprendizaje,
+con su **propio repositorio** (*"Crear un repositorio llamado:
+ingenieria-web-3"*) — **distinto del trabajo integrador de órdenes de
+carga de gas** (T1/T2) que es el alcance de este documento. La
+consulta explícita confirmó: *"no hay ninguna mención de integración
+con otra materia, ni referencia a un sistema de órdenes de carga de
+gas"*. Las exigencias técnicas puntuales de cada carpeta (Zod/React
+Hook Form/VeeValidate, librería de UI con justificación, informe de
+performance 1-2 páginas, Test Plan + Cypress + GitHub Actions +
+Vercel/Netlify) son **exigencias docentes confirmadas por cita, pero
+del proyecto personal de la materia — no del trabajo integrador de
+gas**. CLAUDE.md §13 ya anticipaba este criterio ("no convertir todos
+los ejercicios... en funcionalidades del sistema de gas"); esta
+consulta lo confirma con fuente en vez de dejarlo como supuesto.
+
+**Categorización por carpeta** (E=exigencia docente del proyecto
+personal de la materia, con fuente; J=ejemplo/patrón de clase
+reutilizable, no obligatorio para el integrador de gas; D=decisión
+del equipo; F=dato faltante) y contraste con el frontend del
+integrador (`iw3-frontend`):
+
+| Carpeta | Categoría y fuente | Contraste con el integrador de gas |
+| --- | --- | --- |
+| 01 Presentación / 02 Flujo profesional | E (repo propio "ingenieria-web-3", IA supervisada, 5 roles/agentes) — **no aplica** al integrador, es un repositorio de práctica separado | **No aplica, con justificación**: el integrador ya tiene su propio flujo de ramas/checkpoints (EQ01), inspirado en el mismo patrón pero como **D**ecisión del equipo, no por obligación de esta carpeta |
+| 03 Componentes | J (Button/Card/Navbar/Modal, composición) del proyecto personal | **No aplica directamente**; el patrón de componentes reutilizables (`EstadoBadge`, `.btn*`) ya está adoptado como **D**ecisión del equipo |
+| 04 Estado y formularios | J (login/registro/loading/logout) del proyecto personal | **Cumplido** para el integrador — pero por **TP30 (fuente real: T2)**, no por esta carpeta; la carpeta solo coincide en patrón |
+| 05 Renderizado dinámico | J (filtros/orden/paginación) del proyecto personal | **Cumplido** para el integrador — por **TP31 (fuente real: T2)**, no por esta carpeta |
+| 06 Ciclo de vida y APIs | J (capa `/services`, loading/empty/error) del proyecto personal — mismo patrón ya citado en "Todas las notas" arriba | **Cumplido como D**ecisión del equipo: `ordersApi.ts` como capa de servicios, estados de carga/error/vacío en `OrdersListPage`/`WelcomePage` |
+| 07 Routing y estado global | J (rutas públicas/privadas, roles, sesión/logout) del proyecto personal | **Cumplido como D**ecisión del equipo: `ProtectedRoute`, `AuthContext` — motivado por TP30, no por esta carpeta |
+| 08 CRUD profesional | E (TypeScript, servicios, formulario reutilizable, modal, toast) del proyecto personal | **No aplica**: el integrador no tiene un CRUD genérico por diseño (TP16 ya documenta que no se habilita editar/borrar libremente); no corresponde adoptar este patrón sin una necesidad real del dominio |
+| 09 Formularios profesionales | E, confirmado por cita (Zod/React Hook Form/VeeValidate) del proyecto personal | **No aplica**: el integrador no tiene formularios de alta/edición de este tipo (las únicas entradas de la UI son login y observación de alarma, ya implementadas sin esas librerías) |
+| 10 Arquitectura Frontend | J (separación pages/components/services/router/state/types) del proyecto personal | **Cumplido como D**ecisión del equipo: esa misma separación ya existe en `iw3-frontend/src/` |
+| 11 UI profesional | E, confirmado por cita (librería de UI con justificación; Material UI/Vuetify de referencia, no obligatorias) del proyecto personal | **No aplica**: se decidió explícitamente no usar una biblioteca de componentes completa (ver `docs/contrato-f7-diseno-ui.md`), decisión ya tomada y justificada, no pendiente |
+| 12 Performance | E, confirmado por cita ("ENTREGABLE OBLIGATORIO: informe técnico 1-2 páginas") del proyecto personal | **No aplica** al integrador de gas: esa obligación es del proyecto personal de la materia, no de este trabajo — no se "inventa" un entregable de performance que nadie pidió para este proyecto |
+| 13 Testing y Deploy | E, confirmado por cita (Test Plan, Cypress, GitHub Actions, Vercel/Netlify) del proyecto personal | **No aplica** al integrador de gas: el hosting real de este proyecto es la VM asignada (F8), no Vercel/Netlify; no hay conflicto real porque son proyectos distintos |
+| 14 Seguridad de frontend | F (carpeta reportada vacía, sin fuente en el cuaderno) | Sin contenido que contrastar |
+
+**Dato realmente faltante, sin bloquear el integrador:** si el
+proyecto personal de las carpetas 01-13 tiene una nota/entrega propia
+independiente del trabajo integrador de gas, las fuentes no lo
+aclaran explícitamente (confirmado por NotebookLM: *"no está en el
+material"*). No es una pregunta que pueda resolver una fuente del
+cuaderno — si corresponde, la resuelve el usuario con el docente; no
+bloquea el cierre de F7 porque es un entregable de **otra pieza de
+evaluación**, no del trabajo integrador.
 
 ## Ambigüedades que quedan igual tras esta revisión
 
 Siguen sin resolver con la lectura de T1/T2: contrato exacto de
 activación/colisión de clave (TP09), alcance de la alarma por orden vs.
-global, metadatos exactos de aceptación de alarma (TP34), stack/CI/
-hosting del frontend (bloqueado también por la carpeta 13 de la tabla de
-arriba). Sí se resolvieron con esta lectura: el momento de generación de
-la clave (TP08) y varias precisiones de conciliación/descarte (TP11,
-TP18). La inconsistencia de densidad (rango 0-1 vs. unidad kg/m³) sigue
-como duda pendiente, no resuelta — ver `docs/fuentes.md`.
+global, metadatos exactos de aceptación de alarma (TP34). Sí se
+resolvieron con esta lectura: el momento de generación de la clave
+(TP08) y varias precisiones de conciliación/descarte (TP11, TP18).
+**Resuelto en esta entrada (2026-10-23, NotebookLM FE):** stack/CI/
+hosting de las carpetas 01-13 — pertenecen al proyecto personal
+autónomo de la materia, no al trabajo integrador de gas; sin
+conflicto real con la VM de F8 porque son entregables distintos (ver
+sección "FE: prácticas y criterios por confirmar" arriba). La
+inconsistencia de densidad (rango 0-1 vs. unidad kg/m³) sigue como
+duda pendiente, no resuelta — ver `docs/fuentes.md`.
